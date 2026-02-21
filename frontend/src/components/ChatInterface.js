@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Icon } from '@hugeicons/react';
+import { 
+  HiPlus, HiTrash, HiMenu, HiSun, HiMoon,
+  HiPaperClip, HiMicrophone, HiPaperAirplane,
+  HiChatAlt2, HiLogout
+} from 'react-icons/hi';
 import api from '../utils/api';
 
 function ChatInterface() {
