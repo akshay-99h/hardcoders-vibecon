@@ -825,6 +825,68 @@ function ChatInterface() {
       console.error('Failed to copy:', error);
     }
   };
+  
+  const handleDownloadPDF = async (message) => {
+    try {
+      // Detect document type from message content
+      let documentType = "Document";
+      const content = message.content.toLowerCase();
+      
+      if (content.includes("rti") || content.includes("right to information")) {
+        documentType = "RTI_Application";
+      } else if (content.includes("complaint")) {
+        documentType = "Complaint_Letter";
+      } else if (content.includes("grievance")) {
+        documentType = "Grievance_Text";
+      } else if (content.includes("appeal")) {
+        documentType = "First_Appeal_RTI";
+      } else if (content.includes("subject:") && content.includes("dear")) {
+        documentType = "Email_Draft";
+      }
+      
+      // Call PDF generation API
+      const response = await api.post('/api/generate-pdf', {
+        document_type: documentType,
+        document_content: message.content,
+        user_name: "Citizen"
+      }, {
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${documentType}_${Date.now()}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
+    }
+  };
+  
+  // Check if message is a generated document
+  const isGeneratedDocument = (message) => {
+    if (message.role !== 'assistant') return false;
+    
+    const content = message.content.toLowerCase();
+    const indicators = [
+      'to,',
+      'subject:',
+      'sir/madam',
+      'yours faithfully',
+      'thanking you',
+      'application under',
+      'grievance regarding',
+      'complaint regarding'
+    ];
+    
+    return indicators.some(indicator => content.includes(indicator)) && content.length > 200;
+  };
 
   // Show loading screen while authenticating
   if (isAuthenticating) {
