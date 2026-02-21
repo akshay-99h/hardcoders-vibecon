@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 
 function BillingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState({});
   const [billingMeta, setBillingMeta] = useState({ currency: 'INR', interval: 'month', stripe: {} });
@@ -11,9 +12,12 @@ function BillingPage() {
   const [user, setUser] = useState(null);
   const [actionLoading, setActionLoading] = useState('');
   const [error, setError] = useState('');
+  const [checkoutNotice, setCheckoutNotice] = useState(null);
+  const [checkoutSyncing, setCheckoutSyncing] = useState(false);
 
   useEffect(() => {
     const bootstrap = async () => {
+      setLoading(true);
       try {
         const [meRes, plansRes, statusRes] = await Promise.all([
           api.get('/api/auth/me'),
@@ -28,7 +32,80 @@ function BillingPage() {
           interval: plansPayload.interval || 'month',
           stripe: plansPayload.stripe || {},
         });
-        setStatus(statusRes.data);
+        let nextStatus = statusRes.data;
+
+        const params = new URLSearchParams(location.search);
+        const checkoutFlow = params.get('checkout');
+        const checkoutSessionId = params.get('session_id');
+
+        if (checkoutFlow === 'success') {
+          if (!checkoutSessionId) {
+            setCheckoutNotice({
+              tone: 'warning',
+              title: 'Checkout returned without session id',
+              message: 'Add session_id={CHECKOUT_SESSION_ID} in STRIPE_CHECKOUT_SUCCESS_URL to auto-sync status.',
+            });
+          } else {
+            setCheckoutSyncing(true);
+            try {
+              const paymentRes = await api.get('/api/billing/payment-status', {
+                params: { session_id: checkoutSessionId },
+              });
+              const paymentData = paymentRes.data || {};
+
+              const statusResAfterSync = await api.get('/api/billing/status');
+              nextStatus = statusResAfterSync.data;
+
+              const purchaseStatus = paymentData.purchase_status || 'pending';
+              const checkoutStatus = paymentData.checkout_status || '-';
+              const paymentStatus = paymentData.payment_status || '-';
+              const subscriptionStatus = paymentData.subscription_status || '-';
+
+              if (purchaseStatus === 'succeeded') {
+                setCheckoutNotice({
+                  tone: 'success',
+                  title: 'Payment confirmed',
+                  message: `Plan activated on this account (${paymentData.resolved_plan_key || 'paid'}).`,
+                  meta: `checkout=${checkoutStatus} • payment=${paymentStatus} • subscription=${subscriptionStatus}`,
+                });
+              } else if (purchaseStatus === 'pending') {
+                setCheckoutNotice({
+                  tone: 'info',
+                  title: 'Payment is still processing',
+                  message: 'Status is not final yet. Refresh this page after a few seconds.',
+                  meta: `checkout=${checkoutStatus} • payment=${paymentStatus} • subscription=${subscriptionStatus}`,
+                });
+              } else {
+                setCheckoutNotice({
+                  tone: 'error',
+                  title: `Payment ${purchaseStatus}`,
+                  message: 'Purchase did not finalize. Try checkout again.',
+                  meta: `checkout=${checkoutStatus} • payment=${paymentStatus} • subscription=${subscriptionStatus}`,
+                });
+              }
+            } catch (syncErr) {
+              setCheckoutNotice({
+                tone: 'error',
+                title: 'Unable to sync checkout status',
+                message: syncErr.response?.data?.detail || syncErr.message || 'Please try refreshing billing status.',
+              });
+            } finally {
+              setCheckoutSyncing(false);
+            }
+          }
+        } else if (checkoutFlow === 'cancel') {
+          setCheckoutNotice({
+            tone: 'info',
+            title: 'Checkout canceled',
+            message: 'No payment was processed.',
+          });
+        }
+
+        if (checkoutFlow) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+
+        setStatus(nextStatus);
       } catch (err) {
         console.error('Billing bootstrap failed:', err);
         navigate('/');
@@ -38,13 +115,14 @@ function BillingPage() {
     };
 
     bootstrap();
-  }, [navigate]);
+  }, [navigate, location.search]);
 
   const sortedPlans = useMemo(() => ['free', 'plus', 'pro', 'business'].filter((key) => plans[key]), [plans]);
 
   const handleUpgrade = async (planKey) => {
     setActionLoading(planKey);
     setError('');
+    setCheckoutNotice(null);
     try {
       const response = await api.post('/api/billing/checkout-session', { plan_key: planKey });
       const checkoutUrl = response.data?.url;
@@ -62,6 +140,7 @@ function BillingPage() {
   const handleManageSubscription = async () => {
     setActionLoading('manage');
     setError('');
+    setCheckoutNotice(null);
     try {
       const response = await api.post('/api/billing/customer-portal');
       const portalUrl = response.data?.url;
@@ -120,6 +199,30 @@ function BillingPage() {
         {error && (
           <div className="mb-5 p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-destructive text-sm">
             {error}
+          </div>
+        )}
+
+        {checkoutNotice && (
+          <div
+            className={`mb-5 p-3 rounded-lg border text-sm ${
+              checkoutNotice.tone === 'success'
+                ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                : checkoutNotice.tone === 'warning'
+                  ? 'border-amber-400/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                  : checkoutNotice.tone === 'error'
+                    ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                    : 'border-border bg-muted/40 text-foreground'
+            }`}
+          >
+            <p className="font-semibold">{checkoutNotice.title}</p>
+            <p className="mt-1">{checkoutNotice.message}</p>
+            {checkoutNotice.meta && <p className="mt-1 text-xs opacity-80">{checkoutNotice.meta}</p>}
+          </div>
+        )}
+
+        {checkoutSyncing && (
+          <div className="mb-5 p-3 rounded-lg border border-border bg-muted/40 text-sm text-foreground">
+            Syncing payment status from Stripe...
           </div>
         )}
 
