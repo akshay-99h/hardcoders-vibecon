@@ -247,7 +247,7 @@ function ChatInterface() {
       };
       
       mediaRecorder.onstop = async () => {
-        if (!isInVoiceMode) return; // Exit if voice mode was ended
+        if (!isInVoiceModeRef.current) return; // Exit if voice mode was ended
         
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         
