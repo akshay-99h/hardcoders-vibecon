@@ -1,9 +1,6 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 
 function LandingPage() {
-  const navigate = useNavigate();
-
   const handleLogin = () => {
     // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
     const redirectUrl = window.location.origin + '/chat';
@@ -50,74 +47,20 @@ function LandingPage() {
 
         {/* Footer Links */}
         <footer className="mt-auto pt-8 border-t border-gray-100 flex flex-wrap justify-center items-center gap-x-6 gap-y-2 text-sm text-gray-500 w-full">
-          <a className="hover:text-primary transition-colors" href="#">Terms of Service</a>
-          <a className="hover:text-primary transition-colors" href="#">Privacy Policy</a>
+          <button className="hover:text-primary transition-colors">Terms of Service</button>
+          <button className="hover:text-primary transition-colors">Privacy Policy</button>
           <p>© 2025 Raksha AI</p>
         </footer>
       </main>
 
       {/* Right Comic Strip (60% Width) */}
-      <section className="w-full md:w-[60%] bg-[#fdf6e3] grid grid-cols-1 sm:grid-cols-2 gap-4 p-8">
-        {/* Panel 1: The Problem */}
-        <div className="comic-panel bg-orange-50 flex items-center justify-center min-h-[300px] rounded-lg border-4 border-gray-900 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)] relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center">
-            <div className="text-center p-8">
-              <div className="text-6xl mb-4">😟</div>
-              <p className="text-lg font-semibold text-gray-800">Confused by legal notices?</p>
-            </div>
-          </div>
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-white border-2 border-gray-900 px-4 py-2 rounded-xl w-[90%] text-sm font-medium z-10 text-center">
-            "I don't understand why I got this legal notice..."
-          </div>
-        </div>
-
-        {/* Panel 2: The Frustration */}
-        <div className="comic-panel bg-blue-50 flex items-center justify-center min-h-[300px] rounded-lg border-4 border-gray-900 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)] relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center">
-            <div className="text-center p-8">
-              <div className="text-6xl mb-4">🚫</div>
-              <p className="text-lg font-semibold text-gray-800">No help available</p>
-            </div>
-          </div>
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-white border-2 border-gray-900 px-4 py-2 rounded-xl w-[90%] text-sm font-medium z-10 text-center">
-            "This is a civil matter, we can't help you here."
-          </div>
-        </div>
-
-        {/* Panel 3: The Solution (App Interface) */}
-        <div className="comic-panel bg-primary/10 flex items-center justify-center min-h-[300px] rounded-lg border-4 border-gray-900 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)] relative overflow-hidden">
-          <div className="w-3/4 h-3/4 bg-white rounded-3xl border-4 border-gray-800 p-4 shadow-lg flex flex-col items-center">
-            <div className="w-full flex justify-between mb-4 px-2">
-              <span className="text-[8px] font-bold">10:45</span>
-              <div className="w-12 h-2 bg-gray-200 rounded-full"></div>
-              <span className="text-[8px]">88%</span>
-            </div>
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center mb-2">
-              <span className="text-white font-bold text-lg">R</span>
-            </div>
-            <p className="text-[10px] font-bold text-primary mb-4">RAKSHA AI</p>
-            <div className="w-full space-y-2">
-              <div className="h-2 bg-gray-100 rounded w-full animate-pulse"></div>
-              <div className="h-2 bg-gray-100 rounded w-5/6 animate-pulse"></div>
-              <div className="h-2 bg-gray-100 rounded w-4/6 animate-pulse"></div>
-            </div>
-          </div>
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-white border-2 border-gray-900 px-4 py-2 rounded-xl w-[90%] text-sm font-medium italic text-primary z-10 text-center">
-            Raksha AI is analyzing your notice...<br/>and explaining it in plain English!
-          </div>
-        </div>
-
-        {/* Panel 4: The Relief */}
-        <div className="comic-panel bg-green-50 flex items-center justify-center min-h-[300px] rounded-lg border-4 border-gray-900 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)] relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-green-100 to-green-50 flex items-center justify-center">
-            <div className="text-center p-8">
-              <div className="text-6xl mb-4">😊</div>
-              <p className="text-lg font-semibold text-gray-800">Problem solved!</p>
-            </div>
-          </div>
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-white border-2 border-gray-900 px-4 py-2 rounded-xl w-[90%] text-sm font-medium z-10 text-center">
-            "Finally, I know exactly what to do. Thank you, Raksha AI!"
-          </div>
+      <section className="w-full md:w-[60%] bg-[#fdf6e3] flex items-center justify-center p-8">
+        <div className="w-full h-full flex items-center justify-center">
+          <img 
+            src="/images/comic-strip.png" 
+            alt="Raksha AI Comic Strip - How it works" 
+            className="w-full h-auto max-w-4xl object-contain"
+          />
         </div>
       </section>
     </div>
