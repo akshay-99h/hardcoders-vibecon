@@ -28,6 +28,7 @@ function ChatInterface() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [isRoleUpdating, setIsRoleUpdating] = useState(false);
   const [isInVoiceMode, setIsInVoiceMode] = useState(false);
   const [voiceCallId, setVoiceCallId] = useState(null);
   const [voiceState, setVoiceState] = useState('idle'); // idle, listening, thinking, speaking
@@ -171,6 +172,24 @@ function ChatInterface() {
 
   const toggleTheme = () => {
     setIsDark(!isDark);
+  };
+
+  const toggleDemoAdminRole = async () => {
+    if (!user || isRoleUpdating) return;
+    const nextIsAdmin = user.role !== 'admin' && user.role !== 'superadmin';
+    setIsRoleUpdating(true);
+
+    try {
+      const response = await api.post('/api/auth/demo-role', { is_admin: nextIsAdmin });
+      const nextRole = response.data?.role || (nextIsAdmin ? 'admin' : 'user');
+      setUser((prev) => (prev ? { ...prev, role: nextRole } : prev));
+      setBillingStatus((prev) => (prev ? { ...prev, role: nextRole } : prev));
+    } catch (error) {
+      console.error('Failed to toggle demo role:', error);
+      alert('Failed to update role');
+    } finally {
+      setIsRoleUpdating(false);
+    }
   };
 
   const toolCards = [
@@ -1320,6 +1339,26 @@ function ChatInterface() {
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
               {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
+            </button>
+
+            <button
+              onClick={toggleDemoAdminRole}
+              disabled={isRoleUpdating}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-60"
+              title="Demo role toggle (user/admin)"
+            >
+              <span className="text-xs text-muted-foreground hidden sm:inline">Admin</span>
+              <span
+                className={`relative w-9 h-5 rounded-full transition-colors ${
+                  user?.role === 'admin' || user?.role === 'superadmin' ? 'bg-primary' : 'bg-muted'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                    user?.role === 'admin' || user?.role === 'superadmin' ? 'translate-x-4' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
             </button>
           </div>
         </header>

@@ -98,6 +98,10 @@ class ManualSubscriptionUpdateRequest(BaseModel):
     subscription_status: str = "active"
 
 
+class DemoRoleToggleRequest(BaseModel):
+    is_admin: bool
+
+
 class SeatUpdateRequest(BaseModel):
     seat_limit: int
     seat_used: Optional[int] = None
@@ -272,6 +276,29 @@ async def logout(authorization: Optional[str] = Header(None), request: Request =
     response.delete_cookie("session_token")
     
     return response
+
+
+@app.post("/api/auth/demo-role")
+async def toggle_demo_role(
+    payload: DemoRoleToggleRequest,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Demo-only endpoint: toggle current user between user/admin roles."""
+    user = await get_current_user(authorization, request)
+    next_role = "admin" if payload.is_admin else "user"
+    now = datetime.now(timezone.utc)
+
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"role": next_role, "updated_at": now}},
+    )
+    await db.billing_profiles.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"role": next_role, "updated_at": now}},
+    )
+
+    return {"success": True, "user_id": user["user_id"], "role": next_role}
 
 
 # ============== BILLING ENDPOINTS ==============
