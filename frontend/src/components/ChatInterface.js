@@ -374,7 +374,7 @@ function ChatInterface() {
               disabled={!inputMessage.trim() || isLoading}
               className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
             >
-              <Icon name="sent" size={20} />
+              <HiPaperAirplane size={20} />
             </button>
           </div>
         </div>
