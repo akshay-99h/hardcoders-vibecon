@@ -871,8 +871,66 @@ function ChatInterface() {
         {/* Input Area - Fixed at Bottom */}
         <div className="bg-card border-t border-border p-4 flex-shrink-0">
           <div className="max-w-4xl mx-auto">
+            {/* Voice Conversation Mode UI */}
+            {isInVoiceMode && (
+              <div className="mb-4 p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border-2 border-purple-500/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                        voiceState === 'listening' ? 'bg-purple-500' :
+                        voiceState === 'thinking' ? 'bg-yellow-500' :
+                        voiceState === 'speaking' ? 'bg-blue-500' : 'bg-gray-500'
+                      }`}>
+                        {voiceState === 'listening' && (
+                          <div className="absolute inset-0 bg-purple-400 rounded-full animate-ping opacity-75"></div>
+                        )}
+                        {voiceState === 'speaking' && (
+                          <div className="absolute inset-0 bg-blue-400 rounded-full animate-pulse"></div>
+                        )}
+                        <HiMicrophone className="text-white relative z-10" size={32} />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">
+                        {voiceState === 'listening' && 'Listening...'}
+                        {voiceState === 'thinking' && 'Processing...'}
+                        {voiceState === 'speaking' && 'RakshaAI is speaking...'}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {voiceState === 'listening' && 'Speak now or tap to send'}
+                        {voiceState === 'thinking' && 'Analyzing your question...'}
+                        {voiceState === 'speaking' && 'Listen to the response...'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    {voiceState === 'listening' && (
+                      <button
+                        onClick={stopVoiceListening}
+                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-all"
+                        title="Send now"
+                      >
+                        Send
+                      </button>
+                    )}
+                    
+                    <button
+                      onClick={endVoiceConversation}
+                      className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:opacity-90 transition-all"
+                      title="End voice conversation"
+                    >
+                      End Call
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* File Preview */}
-            {selectedFile && (
+            {!isInVoiceMode && selectedFile && (
               <div className="mb-3 p-3 bg-muted rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center">
@@ -895,68 +953,72 @@ function ChatInterface() {
               </div>
             )}
             
-            <div className="flex items-end gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
-                title="Upload document (legal notice, certificate, etc.)"
-              >
-                <HiPaperClip size={20} />
-              </button>
-
-              <button
-                onClick={() => navigate('/call', { state: { conversationId: currentConversation } })}
-                className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
-                title="Start AI voice call"
-              >
-                <HiPhone size={20} />
-              </button>
-
-              <button
-                onClick={isRecording ? handleStopRecording : handleStartRecording}
-                className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
-                  isRecording
-                    ? 'bg-destructive text-destructive-foreground animate-pulse'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-                title="Voice input"
-              >
-                <HiMicrophone size={20} />
-              </button>
-
-              <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
-                <textarea
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder={selectedFile ? "Add a question about the document (optional)..." : "Type your message..."}
-                  className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
-                  rows={1}
-                  style={{ maxHeight: '120px' }}
+            {/* Regular Input Controls (Hidden in Voice Mode) */}
+            {!isInVoiceMode && (
+              <div className="flex items-end gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+                  onChange={handleFileSelect}
+                  className="hidden"
                 />
-              </div>
+                
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
+                  title="Upload document (legal notice, certificate, etc.)"
+                >
+                  <HiPaperClip size={20} />
+                </button>
 
-              <button
-                onClick={handleSendMessage}
-                disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
-                className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
-                title={selectedFile ? "Analyze document" : "Send message"}
-              >
-                {isAnalyzing ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <HiPaperAirplane size={20} />
-                )}
-              </button>
-            </div>
+                <button
+                  onClick={isRecording ? handleStopRecording : handleStartRecording}
+                  className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
+                    isRecording
+                      ? 'bg-destructive text-destructive-foreground animate-pulse'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`}
+                  title="Voice to text"
+                >
+                  <HiMicrophone size={20} />
+                </button>
+
+                <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
+                  <textarea
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder={selectedFile ? "Add a question about the document (optional)..." : "Type your message..."}
+                    className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
+                    rows={1}
+                    style={{ maxHeight: '120px' }}
+                  />
+                </div>
+
+                <button
+                  onClick={handleSendMessage}
+                  disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
+                  className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                  title={selectedFile ? "Analyze document" : "Send message"}
+                >
+                  {isAnalyzing ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <HiPaperAirplane size={20} />
+                  )}
+                </button>
+                
+                {/* ChatGPT-style inline voice conversation button */}
+                <button
+                  onClick={startVoiceConversation}
+                  className="p-3 bg-gradient-to-br from-purple-500 to-blue-500 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all flex-shrink-0"
+                  title="Start AI voice conversation"
+                >
+                  <HiPhone size={20} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
