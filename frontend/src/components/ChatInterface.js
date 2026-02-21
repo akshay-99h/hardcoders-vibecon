@@ -20,6 +20,7 @@ function ChatInterface() {
   const [isRecording, setIsRecording] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedLanguage, setSelectedLanguage] = useState('en'); // Language for STT
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -111,7 +112,7 @@ function ChatInterface() {
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
-      formData.append('language', 'en');
+      formData.append('language', selectedLanguage); // Use selected language
 
       const response = await api.post('/api/voice/transcribe', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
