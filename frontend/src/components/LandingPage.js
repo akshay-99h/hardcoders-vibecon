@@ -75,9 +75,9 @@ function LandingPage() {
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border hover:bg-accent transition-colors text-sm font-medium text-foreground"
           >
             {theme === 'dark' ? (
-              <Moon02Icon size={16} />
+              <HiMoon className="w-4 h-4" />
             ) : (
-              <Sun03Icon size={16} />
+              <HiSun className="w-4 h-4" />
             )}
             <span className="capitalize">{theme}</span>
             <svg className={cn("w-4 h-4 transition-transform", isDropdownOpen && "rotate-180")} fill="none" stroke="currentColor" viewBox="0 0 24 24">
