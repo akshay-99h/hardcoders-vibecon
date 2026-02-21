@@ -209,7 +209,7 @@ function ChatInterface() {
             onClick={handleNewChat}
             className="w-full bg-primary text-primary-foreground px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
           >
-            <Icon name="add-01" size={20} />
+            <HiPlus size={20} />
             <span>New Chat</span>
           </button>
         </div>
