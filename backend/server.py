@@ -98,6 +98,11 @@ class ManualSubscriptionUpdateRequest(BaseModel):
     subscription_status: str = "active"
 
 
+class SeatUpdateRequest(BaseModel):
+    seat_limit: int
+    seat_used: Optional[int] = None
+
+
 def _is_admin(user: Dict[str, Any]) -> bool:
     return user.get("role") in {"admin", "superadmin"}
 
@@ -277,7 +282,11 @@ async def get_billing_plans():
     return {
         "plans": billing_service.plan_catalog(),
         "currency": "INR",
-        "interval": "month"
+        "interval": "month",
+        "stripe": {
+            "enabled": bool(settings.STRIPE_SECRET_KEY),
+            "publishable_key": settings.STRIPE_PUBLISHABLE_KEY,
+        },
     }
 
 
@@ -294,6 +303,9 @@ async def get_billing_status(authorization: Optional[str] = Header(None), reques
         "subscription_status": usage["subscription_status"],
         "current_period_start": usage["current_period_start"],
         "current_period_end": usage["current_period_end"],
+        "seat_limit": usage.get("seat_limit", 1),
+        "seat_used": usage.get("seat_used", 1),
+        "seats_remaining": usage.get("seats_remaining", 0),
         "metrics": usage["metrics"],
     }
 
@@ -375,6 +387,17 @@ async def admin_subscriptions(
     return await billing_service.admin_subscriptions(limit=limit)
 
 
+@app.get("/api/admin/seats")
+async def admin_seats(
+    limit: int = Query(default=200, ge=1, le=500),
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    user = await get_current_user(authorization, request)
+    _require_admin(user)
+    return await billing_service.admin_seat_overview(limit=limit)
+
+
 @app.get("/api/admin/users")
 async def admin_list_users(
     limit: int = Query(default=50, ge=1, le=200),
@@ -387,10 +410,15 @@ async def admin_list_users(
 
     results = []
     async for item in db.users.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit):
-        profile = await db.billing_profiles.find_one({"user_id": item["user_id"]}, {"_id": 0, "plan_key": 1, "subscription_status": 1})
+        profile = await db.billing_profiles.find_one(
+            {"user_id": item["user_id"]},
+            {"_id": 0, "plan_key": 1, "subscription_status": 1, "seat_limit": 1, "seat_used": 1},
+        )
         item["role"] = item.get("role", "user")
         item["plan_key"] = profile.get("plan_key", "free") if profile else "free"
         item["subscription_status"] = profile.get("subscription_status", "inactive") if profile else "inactive"
+        item["seat_limit"] = profile.get("seat_limit", 1) if profile else 1
+        item["seat_used"] = profile.get("seat_used", 1) if profile else 1
         results.append(serialize_doc(item))
 
     total = await db.users.count_documents({})
@@ -448,15 +476,10 @@ async def admin_update_user_subscription(
         raise HTTPException(status_code=404, detail="User not found")
 
     await billing_service.ensure_customer(target)
-    await db.billing_profiles.update_one(
-        {"user_id": user_id},
-        {
-            "$set": {
-                "plan_key": payload.plan_key,
-                "subscription_status": payload.subscription_status,
-                "updated_at": datetime.now(timezone.utc),
-            }
-        },
+    await billing_service.sync_profile_plan_for_user(
+        user_id=user_id,
+        plan_key=payload.plan_key,
+        subscription_status=payload.subscription_status,
     )
     await db.admin_audit_logs.insert_one(
         {
@@ -470,6 +493,43 @@ async def admin_update_user_subscription(
     )
 
     return {"success": True, "user_id": user_id, "plan_key": payload.plan_key, "subscription_status": payload.subscription_status}
+
+
+@app.put("/api/admin/users/{user_id}/seats")
+async def admin_update_user_seats(
+    user_id: str,
+    payload: SeatUpdateRequest,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    actor = await get_current_user(authorization, request)
+    _require_admin(actor)
+
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await billing_service.ensure_customer(target)
+    try:
+        seat_result = await billing_service.update_user_seats(
+            user_id=user_id,
+            seat_limit=payload.seat_limit,
+            seat_used=payload.seat_used,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    await db.admin_audit_logs.insert_one(
+        {
+            "actor_user_id": actor["user_id"],
+            "target_user_id": user_id,
+            "action": "update_seats",
+            "seat_limit": seat_result["seat_limit"],
+            "seat_used": seat_result["seat_used"],
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    return {"success": True, **seat_result}
 
 # ============== CHAT ENDPOINTS ==============
 
