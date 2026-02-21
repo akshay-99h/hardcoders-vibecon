@@ -256,17 +256,15 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
         # Handle different response types
         if "error" in result:
             assistant_message = result.get("message", "I apologize, but I encountered an error. Please try rephrasing your question.")
-        elif "clarification_needed" in result and result.get("clarification_needed"):
-            assistant_message = result.get("clarification_question", "Could you please provide more details?")
+        elif "success" in result:
+            # Use the helpful message from the LLM
+            assistant_message = result.get("message", "I'm here to help! Please let me know what you need assistance with.")
         else:
-            # Generate helpful response based on mission intent
-            domain = result.get("domain", "")
-            objective = result.get("objective", "")
-            
-            assistant_message = f"I understand you need help with {domain} services, specifically: {objective}.\n\n"
-            assistant_message += "I can guide you through this process. What specific information would you like to know?"
+            # Fallback
+            assistant_message = "I'm here to help you with government services. What would you like to know?"
     
     except Exception as e:
+        print(f"Chat error: {e}")
         assistant_message = "I apologize, but I'm having trouble processing your request. Could you please rephrase?"
     
     # Save assistant message
