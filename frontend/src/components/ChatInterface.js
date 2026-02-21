@@ -1020,6 +1020,16 @@ function ChatInterface() {
                 </div>
               </div>
             )}
+            
+            {/* Show "Speaking..." indicator while user is actively speaking in voice mode */}
+            {isInVoiceMode && isUserSpeaking && (
+              <div className="flex justify-end animate-fade-in">
+                <div className="bg-purple-500 text-white rounded-[1.4rem] px-5 py-3 flex items-center gap-2">
+                  <HiMicrophone size={16} className="animate-pulse" />
+                  <span className="text-sm">Speaking...</span>
+                </div>
+              </div>
+            )}
 
             <div ref={messagesEndRef} />
           </div>
