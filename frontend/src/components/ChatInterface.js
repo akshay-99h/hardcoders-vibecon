@@ -35,6 +35,7 @@ function ChatInterface() {
   const fileInputRef = useRef(null);
   const voiceAudioRef = useRef(null);
   const streamRef = useRef(null);
+  const isInVoiceModeRef = useRef(false); // Track voice mode for callbacks
 
   useEffect(() => {
     handleAuthCallback();
