@@ -14,24 +14,8 @@ function LandingPage() {
   const handleLogin = () => {
     const redirectUrl = window.location.origin + '/chat';
     const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-    
-    // Open in popup window for better UX
-    const width = 500;
-    const height = 600;
-    const left = (window.screen.width - width) / 2;
-    const top = (window.screen.height - height) / 2;
-    
-    const popup = window.open(
-      authUrl,
-      'Google Sign In',
-      `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no`
-    );
-
-    // Check if popup was blocked
-    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      // Fallback to redirect if popup blocked
-      window.location.href = authUrl;
-    }
+    // Direct redirect - OAuth requires full page navigation
+    window.location.href = authUrl;
   };
 
   return (
