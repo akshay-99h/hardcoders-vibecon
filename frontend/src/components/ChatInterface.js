@@ -254,9 +254,9 @@ function ChatInterface() {
       let speechDetected = false;
       let consecutiveSilenceFrames = 0;
       
-      // Very forgiving thresholds - allows natural speech pauses
-      const SPEECH_THRESHOLD = 15; // Higher threshold
-      const SILENCE_FRAMES_NEEDED = 180; // ~5-6 seconds at 60fps (very forgiving)
+      // Balanced thresholds - not too sensitive, not too slow
+      const SPEECH_THRESHOLD = 15; // Good threshold
+      const SILENCE_FRAMES_NEEDED = 120; // ~2-3 seconds at 60fps (balanced)
       const MIN_SPEECH_FRAMES = 30; // Minimum frames of speech before considering silence
       let speechFrames = 0;
       
