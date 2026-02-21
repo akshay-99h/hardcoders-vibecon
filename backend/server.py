@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 import os
 import uuid
+import base64
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
