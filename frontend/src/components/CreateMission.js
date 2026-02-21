@@ -21,6 +21,7 @@ function CreateMission() {
   const [showStateSelector, setShowStateSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isDark, setIsDark] = useState(false);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -42,11 +43,24 @@ function CreateMission() {
   ];
 
   useEffect(() => {
+    // Apply theme on mount
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDark]);
+
+  useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const toggleTheme = () => {
+    setIsDark(!isDark);
   };
 
   const handleStartRecording = async () => {
@@ -102,19 +116,16 @@ function CreateMission() {
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
 
-    // Add user message
     const userMessage = inputMessage.trim();
     addMessage('user', userMessage);
     setInputMessage('');
 
-    // Check if we need state
     if (!state) {
       setShowStateSelector(true);
       addMessage('assistant', '📍 Which state are you in? This helps me provide accurate information based on your location.');
       return;
     }
 
-    // Process the mission
     setIsLoading(true);
     addMessage('assistant', '🔍 Analyzing your request and finding the best solution...');
 
@@ -125,10 +136,8 @@ function CreateMission() {
         previous_context: suggestedDomain ? `Domain preference: ${suggestedDomain}` : ''
       });
 
-      // Success message
       addMessage('assistant', `✅ Great! I've created your mission: "${response.data.title}"\n\n📋 ${response.data.briefing}\n\n⏱️ Estimated time: ${response.data.estimated_completion_time}\n\nClick "View Mission Timeline" below to get started!`);
       
-      // Show view mission button
       setMessages(prev => [...prev, { 
         role: 'action', 
         missionId: response.data.mission_id,
@@ -162,24 +171,27 @@ function CreateMission() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-card border-b border-border sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => navigate('/dashboard')}
-            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
           >
             ← Back
           </button>
           <div className="flex-1">
-            <h1 className="text-lg font-bold text-gray-900">Mission Guide</h1>
-            <p className="text-xs text-gray-600">AI-powered government services assistant</p>
+            <h1 className="text-lg font-bold text-foreground">Mission Guide</h1>
+            <p className="text-xs text-muted-foreground">AI-powered government services assistant</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-xs text-gray-600">Online</span>
-          </div>
+          <button
+            onClick={toggleTheme}
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+            title="Toggle theme"
+          >
+            {isDark ? '☀️' : '🌙'}
+          </button>
         </div>
       </header>
 
@@ -189,23 +201,17 @@ function CreateMission() {
           {messages.map((message, index) => (
             <div key={index}>
               {message.role === 'assistant' && (
-                <div className="flex items-start gap-3 animate-fade-in">
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-sm">🤖</span>
-                  </div>
-                  <div className="flex-1 bg-white rounded-2xl rounded-tl-none px-4 py-3 shadow-sm border border-gray-200">
-                    <p className="text-gray-800 whitespace-pre-wrap">{message.content}</p>
+                <div className="flex justify-start animate-fade-in">
+                  <div className="max-w-[85%] bg-card text-card-foreground rounded-[1.4rem] px-5 py-3 shadow-sm border border-border">
+                    <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                   </div>
                 </div>
               )}
 
               {message.role === 'user' && (
-                <div className="flex items-start gap-3 justify-end animate-fade-in">
-                  <div className="flex-1 bg-blue-600 rounded-2xl rounded-tr-none px-4 py-3 shadow-sm max-w-[80%] ml-auto">
-                    <p className="text-white whitespace-pre-wrap">{message.content}</p>
-                  </div>
-                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-gray-600 text-sm">👤</span>
+                <div className="flex justify-end animate-fade-in">
+                  <div className="max-w-[85%] bg-primary text-primary-foreground rounded-[1.4rem] px-5 py-3 shadow-sm">
+                    <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                   </div>
                 </div>
               )}
@@ -214,7 +220,7 @@ function CreateMission() {
                 <div className="flex justify-center my-4 animate-fade-in">
                   <button
                     onClick={() => navigate(`/mission/${message.missionId}`)}
-                    className="btn-primary px-6 py-3 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+                    className="bg-primary text-primary-foreground px-6 py-3 rounded-[1.4rem] font-semibold shadow-md hover:shadow-lg transition-all"
                     data-testid="view-mission-btn"
                   >
                     View Mission Timeline →
@@ -226,14 +232,14 @@ function CreateMission() {
 
           {/* State Selector */}
           {showStateSelector && (
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200 animate-fade-in">
-              <p className="text-sm font-semibold text-gray-700 mb-3">Select your state:</p>
+            <div className="bg-card rounded-[1.4rem] p-4 shadow-sm border border-border animate-fade-in">
+              <p className="text-sm font-semibold text-foreground mb-3">Select your state:</p>
               <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
                 {states.map((s) => (
                   <button
                     key={s}
                     onClick={() => handleStateSelect(s)}
-                    className="px-3 py-2 text-sm text-left bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors"
+                    className="px-3 py-2 text-sm text-left bg-accent hover:bg-accent/80 text-accent-foreground rounded-lg transition-colors"
                   >
                     {s}
                   </button>
@@ -244,15 +250,12 @@ function CreateMission() {
 
           {/* Loading indicator */}
           {isLoading && (
-            <div className="flex items-start gap-3 animate-fade-in">
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-sm">🤖</span>
-              </div>
-              <div className="bg-white rounded-2xl rounded-tl-none px-4 py-3 shadow-sm border border-gray-200">
+            <div className="flex justify-start animate-fade-in">
+              <div className="bg-card rounded-[1.4rem] px-5 py-3 shadow-sm border border-border">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                 </div>
               </div>
             </div>
@@ -262,28 +265,19 @@ function CreateMission() {
         </div>
       </div>
 
-      {/* Privacy Notice - Fixed at bottom of chat */}
-      <div className="max-w-4xl mx-auto px-4 pb-2">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-          <p className="text-xs text-yellow-800">
-            <span className="font-semibold">🔒 Privacy:</span> Never share Aadhaar, PAN, OTP, or passwords here. I'll guide you to official portals for sensitive information.
-          </p>
-        </div>
-      </div>
-
       {/* Input Area */}
-      <div className="bg-white border-t border-gray-200 sticky bottom-0">
+      <div className="bg-card border-t border-border sticky bottom-0">
         <div className="max-w-4xl mx-auto px-4 py-4">
           {/* Quick Suggestions */}
           {messages.length === 1 && !state && (
             <div className="mb-3">
-              <p className="text-xs text-gray-500 mb-2">Quick suggestions:</p>
+              <p className="text-xs text-muted-foreground mb-2">Quick suggestions:</p>
               <div className="flex flex-wrap gap-2">
                 {quickSuggestions.map((suggestion, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleQuickSuggestion(suggestion)}
-                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700 transition-colors flex items-center gap-1"
+                    className="px-3 py-1.5 bg-accent hover:bg-accent/80 rounded-full text-sm text-accent-foreground transition-colors flex items-center gap-1"
                   >
                     <span>{suggestion.icon}</span>
                     <span>{suggestion.text}</span>
@@ -295,37 +289,50 @@ function CreateMission() {
 
           {/* Input Box */}
           <div className="flex items-end gap-2">
-            <div className="flex-1 bg-gray-100 rounded-2xl px-4 py-2 flex items-center gap-2">
+            {/* Attachment Button */}
+            <button
+              className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
+              title="Attach file"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+            </button>
+
+            {/* Voice Button */}
+            <button
+              onClick={isRecording ? handleStopRecording : handleStartRecording}
+              className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
+                isRecording 
+                  ? 'bg-destructive text-destructive-foreground animate-pulse' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+              title={isRecording ? 'Stop recording' : 'Voice input'}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+            </button>
+
+            {/* Text Input */}
+            <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
               <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="Type your message..."
-                className="flex-1 bg-transparent border-none outline-none resize-none text-gray-800 placeholder-gray-500"
+                className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
                 rows={1}
                 style={{ maxHeight: '120px' }}
                 data-testid="chat-input"
               />
-              
-              {/* Voice Button */}
-              <button
-                onClick={isRecording ? handleStopRecording : handleStartRecording}
-                className={`p-2 rounded-lg transition-colors ${
-                  isRecording 
-                    ? 'bg-red-500 text-white animate-pulse' 
-                    : 'hover:bg-gray-200 text-gray-600'
-                }`}
-                title={isRecording ? 'Stop recording' : 'Use voice'}
-              >
-                {isRecording ? '⏹️' : '🎤'}
-              </button>
             </div>
 
             {/* Send Button */}
             <button
               onClick={handleSendMessage}
               disabled={!inputMessage.trim() || isLoading}
-              className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
               data-testid="send-message-btn"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -334,7 +341,7 @@ function CreateMission() {
             </button>
           </div>
 
-          <p className="text-xs text-gray-500 mt-2 text-center">
+          <p className="text-xs text-muted-foreground mt-2 text-center">
             Press Enter to send • Shift + Enter for new line
           </p>
         </div>
