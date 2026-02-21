@@ -260,7 +260,7 @@ function ChatInterface() {
             onClick={handleLogout}
             className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
           >
-            <Icon name="logout-01" size={16} />
+            <HiLogout size={16} />
             <span>Logout</span>
           </button>
         </div>
