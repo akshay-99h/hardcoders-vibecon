@@ -281,16 +281,32 @@ function ChatInterface() {
               <HiMenu size={20} />
             </button>
             <div>
-              <h1 className="text-lg font-bold text-foreground">Government Services Assistant</h1>
-              <p className="text-xs text-muted-foreground">Powered by AI</p>
+              <h1 className="text-lg font-bold text-foreground">RakshaAI Chat</h1>
+              <p className="text-xs text-muted-foreground">AI-powered legal & financial guidance</p>
             </div>
           </div>
-          <button
-            onClick={toggleTheme}
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-          >
-            {isDark ? <HiSun size={20} /> : <HiMoon size={20} />}
-          </button>
+          
+          <div className="flex items-center gap-2">
+            {/* Language Selector for Voice */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-xs">
+              <span className="text-muted-foreground">Voice:</span>
+              <select
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="bg-transparent text-foreground font-medium outline-none cursor-pointer"
+              >
+                <option value="en">English</option>
+                <option value="hi">हिन्दी (Hindi)</option>
+              </select>
+            </div>
+            
+            <button
+              onClick={toggleTheme}
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+            >
+              {isDark ? <HiSun size={20} /> : <HiMoon size={20} />}
+            </button>
+          </div>
         </header>
 
         {/* Messages Area - Fixed Height, Scrollable */}
