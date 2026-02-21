@@ -158,8 +158,10 @@ function ChatInterface() {
     try {
       const response = await api.get('/api/billing/status');
       setBillingStatus(response.data);
+      return response.data;
     } catch (error) {
       console.error('Failed to fetch billing status:', error);
+      return null;
     }
   };
 
@@ -177,18 +179,21 @@ function ChatInterface() {
       title: 'Track Application',
       description: 'Passport, Aadhaar, PAN and more',
       prompt: 'Help me track my government application status step by step.',
+      metric: 'chat_messages',
     },
     {
       id: 'notice',
       title: 'Analyze Notice',
       description: 'Understand legal/government notices',
       prompt: 'Help me analyze a government notice and explain the next steps.',
+      metric: 'document_analysis',
     },
     {
       id: 'draft',
       title: 'Draft Complaint/RTI',
       description: 'Generate structured letters fast',
       prompt: 'Help me draft an RTI or complaint with the required details checklist.',
+      metric: 'chat_messages',
     },
     {
       id: 'deadline',
@@ -202,6 +207,7 @@ function ChatInterface() {
       title: 'Fraud URL Check',
       description: 'Detect fake portals before login',
       prompt: 'Check if this government website URL is safe and official.',
+      metric: 'chat_messages',
     },
     {
       id: 'guided',
@@ -212,13 +218,79 @@ function ChatInterface() {
     },
   ];
 
+  const getMetricLabel = (metricKey) => {
+    return {
+      chat_messages: 'Chat prompts',
+      stt_requests: 'Voice requests',
+      document_analysis: 'Document scans',
+      pdf_exports: 'PDF exports',
+      automation_runs: 'Automation runs',
+    }[metricKey] || metricKey.replace(/_/g, ' ');
+  };
+
+  const getMetricSnapshot = (metricKey) => {
+    if (!metricKey) return null;
+    return billingStatus?.metrics?.[metricKey] || null;
+  };
+
+  const isMetricLocked = (metricKey) => {
+    const metric = getMetricSnapshot(metricKey);
+    if (!metric) return false;
+    const limit = Number(metric.limit ?? 0);
+    const remaining = Number(metric.remaining ?? 0);
+    return limit <= 0 || remaining <= 0 || Boolean(metric.exhausted);
+  };
+
   const isToolLocked = (tool) => {
     if (!tool.metric) return false;
-    const limit = billingStatus?.metrics?.[tool.metric]?.limit ?? 0;
-    return limit <= 0;
+    return isMetricLocked(tool.metric);
+  };
+
+  const getToolQuotaBadge = (tool) => {
+    if (!tool.metric) return null;
+    const metric = getMetricSnapshot(tool.metric);
+    if (!metric) {
+      return { label: 'Checking quota...', className: 'bg-muted text-muted-foreground' };
+    }
+
+    const limit = Number(metric.limit ?? 0);
+    const remaining = Number(metric.remaining ?? 0);
+    if (limit <= 0) {
+      return { label: 'Locked on plan', className: 'bg-muted text-muted-foreground' };
+    }
+    if (remaining <= 0 || Boolean(metric.exhausted)) {
+      return { label: `0 left this month`, className: 'bg-destructive/10 text-destructive' };
+    }
+    return { label: `${remaining} left this month`, className: 'bg-primary/10 text-primary' };
+  };
+
+  const extractQuotaError = (error) => {
+    const detail = error?.response?.data?.detail;
+    if (error?.response?.status !== 402 || !detail || typeof detail !== 'object') {
+      return null;
+    }
+    if (detail.code !== 'PLAN_LIMIT_EXCEEDED') {
+      return null;
+    }
+    return detail;
+  };
+
+  const handleQuotaError = async (error) => {
+    const quota = extractQuotaError(error);
+    if (!quota) return false;
+
+    const metricLabel = getMetricLabel(quota.feature_key || 'usage');
+    alert(`Limit reached for ${metricLabel}. Upgrade your plan to continue.`);
+    await fetchBillingStatus();
+    return true;
   };
 
   const handleStartRecording = async () => {
+    if (isMetricLocked('stt_requests')) {
+      navigate('/billing');
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
@@ -259,7 +331,10 @@ function ChatInterface() {
       });
 
       setInputMessage(response.data.text);
+      await fetchBillingStatus();
     } catch (error) {
+      const handled = await handleQuotaError(error);
+      if (handled) return;
       console.error('Transcription error:', error);
     }
   };
@@ -267,6 +342,11 @@ function ChatInterface() {
   // ============== CHATGPT-STYLE VOICE CONVERSATION ==============
   
   const startVoiceConversation = async () => {
+    if (isMetricLocked('stt_requests')) {
+      navigate('/billing');
+      return;
+    }
+
     try {
       // Start AI call session
       const response = await api.post('/api/ai-call/start', {
@@ -497,6 +577,8 @@ function ChatInterface() {
         setCurrentConversation(response.data.conversation_id);
         fetchConversations();
       }
+
+      await fetchBillingStatus();
       
       // Play AI response using BROWSER TEXT-TO-SPEECH
       setVoiceState('speaking');
@@ -571,6 +653,11 @@ function ChatInterface() {
       window.speechSynthesis.speak(utterance);
       
     } catch (error) {
+      const handled = await handleQuotaError(error);
+      if (handled) {
+        endVoiceConversation();
+        return;
+      }
       console.error('Voice turn error:', error);
       alert(`Voice conversation error: ${error.response?.data?.detail || error.message}`);
       endVoiceConversation();
@@ -653,10 +740,14 @@ function ChatInterface() {
         fetchConversations(); // Refresh sidebar
       }
 
+      await fetchBillingStatus();
+
     } catch (error) {
-      console.error('Chat error:', error);
       // Remove optimistic user message on error
       setMessages(prev => prev.slice(0, -1));
+      const handled = await handleQuotaError(error);
+      if (handled) return;
+      console.error('Chat error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -706,6 +797,11 @@ function ChatInterface() {
   };
 
   const handleFileSelect = (e) => {
+    if (isMetricLocked('document_analysis')) {
+      navigate('/billing');
+      return;
+    }
+
     const file = e.target.files[0];
     if (file) {
       // Check file type
@@ -781,6 +877,8 @@ function ChatInterface() {
       }
       
     } catch (error) {
+      const handled = await handleQuotaError(error);
+      if (handled) return;
       console.error('Document analysis error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -790,6 +888,7 @@ function ChatInterface() {
     } finally {
       setIsAnalyzing(false);
       setIsLoading(false);
+      await fetchBillingStatus();
     }
   };
 
@@ -908,6 +1007,11 @@ function ChatInterface() {
   };
   
   const handleDownloadPDF = async (message) => {
+    if (isMetricLocked('pdf_exports')) {
+      navigate('/billing');
+      return;
+    }
+
     try {
       // Extract only the document portion (remove AI explanations)
       const cleanDocument = extractDocumentOnly(message.content);
@@ -951,8 +1055,11 @@ function ChatInterface() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      await fetchBillingStatus();
       
     } catch (err) {
+      const handled = await handleQuotaError(err);
+      if (handled) return;
       console.error('Failed to generate PDF:', err);
       alert('Failed to generate PDF. Please try again.');
     }
@@ -1231,13 +1338,14 @@ function ChatInterface() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-left">
                     {toolCards.map((tool) => {
                       const locked = isToolLocked(tool);
+                      const quotaBadge = getToolQuotaBadge(tool);
                       return (
                         <button
                           key={tool.id}
                           onClick={() => handleToolClick(tool)}
                           className={`p-4 rounded-xl border transition-all ${
                             locked
-                              ? 'border-border bg-muted/50 opacity-90'
+                              ? 'border-border bg-muted/60 opacity-90'
                               : 'border-border bg-card hover:border-primary/40 hover:shadow-sm'
                           }`}
                         >
@@ -1246,6 +1354,14 @@ function ChatInterface() {
                             {locked && <span className="text-xs text-muted-foreground">Upgrade</span>}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">{tool.description}</p>
+                          {quotaBadge && (
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <span className="text-[11px] text-muted-foreground">{getMetricLabel(tool.metric)}</span>
+                              <span className={`text-[11px] px-2 py-1 rounded-full ${quotaBadge.className}`}>
+                                {quotaBadge.label}
+                              </span>
+                            </div>
+                          )}
                         </button>
                       );
                     })}
@@ -1456,31 +1572,48 @@ function ChatInterface() {
                 
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button
+                    onClick={startVoiceConversation}
+                    disabled={isMetricLocked('stt_requests')}
+                    className={`p-3 rounded-lg transition-colors ${
+                      isMetricLocked('stt_requests')
+                        ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
+                    title={isMetricLocked('stt_requests') ? 'Voice quota exhausted. Upgrade plan.' : 'Start AI voice conversation'}
+                  >
+                    <Call02Icon size={20} />
+                  </button>
+
+                  <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-                    title="Upload document (legal notice, certificate, etc.)"
+                    disabled={isMetricLocked('document_analysis')}
+                    className={`p-3 rounded-lg transition-colors ${
+                      isMetricLocked('document_analysis')
+                        ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
+                    title={isMetricLocked('document_analysis') ? 'Document analysis quota exhausted. Upgrade plan.' : 'Upload document (legal notice, certificate, etc.)'}
                   >
                     <AttachmentIcon size={20} />
                   </button>
 
                   <button
                     onClick={isRecording ? handleStopRecording : handleStartRecording}
+                    disabled={!isRecording && isMetricLocked('stt_requests')}
                     className={`p-3 transition-colors rounded-lg ${
                       isRecording
                         ? 'bg-destructive text-destructive-foreground animate-pulse'
+                        : isMetricLocked('stt_requests')
+                          ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                     }`}
-                    title="Voice to text"
+                    title={
+                      isMetricLocked('stt_requests') && !isRecording
+                        ? 'Voice quota exhausted. Upgrade plan.'
+                        : 'Voice to text'
+                    }
                   >
                     <Mic01Icon size={20} />
-                  </button>
-
-                  <button
-                    onClick={startVoiceConversation}
-                    className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-                    title="Start AI voice conversation"
-                  >
-                    <Call02Icon size={20} />
                   </button>
                 </div>
 
