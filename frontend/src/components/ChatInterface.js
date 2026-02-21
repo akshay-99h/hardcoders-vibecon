@@ -26,10 +26,15 @@ function ChatInterface() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [isInVoiceMode, setIsInVoiceMode] = useState(false);
+  const [voiceCallId, setVoiceCallId] = useState(null);
+  const [voiceState, setVoiceState] = useState('idle'); // idle, listening, thinking, speaking
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const fileInputRef = useRef(null);
+  const voiceAudioRef = useRef(null);
+  const streamRef = useRef(null);
 
   useEffect(() => {
     handleAuthCallback();
