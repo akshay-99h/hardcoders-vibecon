@@ -320,20 +320,28 @@ async def asking_reminder_response(update: Update, context: ContextTypes.DEFAULT
     chat_id = update.effective_chat.id
     response = update.message.text.strip()
     
-    if response.startswith('1') or response.lower() == 'yes':
+    logger.info(f"Received reminder response from {chat_id}: {response}")
+    
+    if response.startswith('1') or response.lower() in ['yes', 'हाँ', 'हां']:
         # User wants reminder
         await update.message.reply_text(
-            "After how many days?\n"
-            "(Default: 15 days)",
+            "📅 *How many days should I wait before reminding you?*\n\n"
+            "Please enter a number between 1-90 days.\n"
+            "(Default: 15 days if you enter an invalid number)",
+            parse_mode='Markdown',
             reply_markup=ReplyKeyboardRemove()
         )
         return ASKING_DAYS
     else:
         # User doesn't want reminder
         await update.message.reply_text(
-            "No reminder set. You can ask me anything else!",
+            "✅ No reminder set.\n\n"
+            "You can ask me anything else or use /help to see what I can do!",
             reply_markup=ReplyKeyboardRemove()
         )
+        # Clear document context
+        if chat_id in user_document_context:
+            del user_document_context[chat_id]
         return ConversationHandler.END
 
 
@@ -342,35 +350,51 @@ async def asking_days_response(update: Update, context: ContextTypes.DEFAULT_TYP
     chat_id = update.effective_chat.id
     response = update.message.text.strip()
     
+    logger.info(f"Received days response from {chat_id}: {response}")
+    
     # Parse days
     try:
         days = int(response)
         if days < 1 or days > 90:
             raise ValueError("Days must be between 1 and 90")
-    except:
+    except Exception as e:
+        logger.warning(f"Invalid days input from {chat_id}: {response}, using default 15")
         days = 15  # Default
     
     # Get document context
     doc_context = user_document_context.get(chat_id, {})
     service_type = doc_context.get("document_type", "Document")
     
+    logger.info(f"Creating reminder for {chat_id}: {service_type} in {days} days")
+    
     # Create reminder
-    await create_reminder(
-        chat_id=chat_id,
-        service_type=service_type,
-        action_type=detect_action_type(service_type),
-        days=days
-    )
-    
-    reminder_date = datetime.utcnow() + timedelta(days=days)
-    
-    await update.message.reply_text(
-        f"✅ *Reminder Set!*\n\n"
-        f"I'll remind you about your {service_type} on "
-        f"{reminder_date.strftime('%d %B %Y')}.\n\n"
-        f"You can disable notifications anytime with /stop\\_notifications",
-        parse_mode='Markdown'
-    )
+    try:
+        await create_reminder(
+            chat_id=chat_id,
+            service_type=service_type,
+            action_type=detect_action_type(service_type),
+            days=days
+        )
+        
+        reminder_date = datetime.utcnow() + timedelta(days=days)
+        
+        await update.message.reply_text(
+            f"✅ *Reminder Set Successfully!*\n\n"
+            f"📝 Document: {service_type}\n"
+            f"📅 Reminder Date: {reminder_date.strftime('%d %B %Y')}\n"
+            f"⏰ Days from now: {days}\n\n"
+            f"I'll send you a notification on that date. You can disable notifications anytime with /stop\\_notifications",
+            parse_mode='Markdown'
+        )
+        
+        logger.info(f"Reminder created successfully for {chat_id}")
+        
+    except Exception as e:
+        logger.error(f"Error creating reminder for {chat_id}: {e}")
+        await update.message.reply_text(
+            "❌ Sorry, there was an error setting your reminder. Please try again later.",
+            parse_mode='Markdown'
+        )
     
     # Clean up context
     if chat_id in user_document_context:
@@ -463,6 +487,10 @@ def main():
             ASKING_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, asking_days_response)],
         },
         fallbacks=[CommandHandler('cancel', cancel_handler)],
+        allow_reentry=True,
+        per_user=True,
+        per_chat=True,
+        conversation_timeout=300  # 5 minutes timeout
     )
     
     application.add_handler(conv_handler)
