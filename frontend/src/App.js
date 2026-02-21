@@ -1,8 +1,8 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { LanguageProvider } from './contexts/LanguageContext';
 import './App.css';
 
-// Import components
 import LandingPage from './components/LandingPage';
 import AuthCallback from './components/AuthCallback';
 import ChatInterface from './components/ChatInterface';
@@ -11,14 +11,6 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 
 function AppRouter() {
-  const location = useLocation();
-  
-  // CRITICAL: Check URL fragment for session_id synchronously during render
-  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-  if (location.hash?.includes('session_id=')) {
-    return <AuthCallback />;
-  }
-  
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
@@ -33,9 +25,11 @@ function AppRouter() {
 
 function App() {
   return (
-    <Router>
-      <AppRouter />
-    </Router>
+    <LanguageProvider>
+      <Router>
+        <AppRouter />
+      </Router>
+    </LanguageProvider>
   );
 }
 
