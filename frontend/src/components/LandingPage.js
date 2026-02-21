@@ -4,9 +4,7 @@ import {
   HiArrowRight, 
   HiSun, 
   HiMoon, 
-  HiShieldCheck,
-  HiCheckCircle,
-  HiSparkles
+  HiShieldCheck
 } from 'react-icons/hi2';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -43,24 +41,6 @@ function LandingPage() {
     const redirectUrl = window.location.origin + '/chat';
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
   };
-
-  const features = [
-    {
-      icon: <HiShieldCheck className="w-6 h-6" />,
-      title: "Secure & Private",
-      description: "Your data is encrypted and never shared"
-    },
-    {
-      icon: <HiSparkles className="w-6 h-6" />,
-      title: "AI-Powered",
-      description: "Advanced AI to simplify complex processes"
-    },
-    {
-      icon: <HiCheckCircle className="w-6 h-6" />,
-      title: "Easy to Use",
-      description: "Step-by-step guidance for every task"
-    }
-  ];
 
   return (
     <div className="min-h-screen bg-background transition-colors duration-300 overflow-hidden relative">
@@ -117,101 +97,98 @@ function LandingPage() {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 max-w-6xl mx-auto px-6 py-20 flex flex-col items-center justify-center min-h-screen">
-        {/* Logo */}
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-20 flex items-center justify-center min-h-screen">
+        {/* Logo - Top Left */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-16"
+          className="absolute top-0 left-6"
         >
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <HiShieldCheck className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-bold text-primary">RakshaAI</span>
+            <span className="text-2xl font-bold text-primary">HardCoders</span>
           </div>
         </motion.div>
 
-        {/* Hero Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="text-center max-w-4xl mb-12"
-        >
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
-            Your Shield for{' '}
-            <span className="text-primary bg-clip-text">Legal & Financial</span>{' '}
-            Clarity
-          </h1>
-          
-          <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-2xl mx-auto mb-10">
-            Upload notices, get expert advice, and navigate complex problems with ease. 
-            We translate legal jargon into plain English.
-          </p>
+        {/* Hero Section - Two Columns */}
+        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          {/* Left Column - Text Content */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="text-left"
+          >
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
+              Your Shield for{' '}
+              <span className="text-primary">Legal & Financial</span>{' '}
+              Clarity
+            </h1>
+            
+            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed mb-10">
+              Upload notices, get expert advice, and navigate complex problems with ease. 
+              We translate legal jargon into plain English.
+            </p>
 
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button
-              onClick={handleLogin}
-              size="lg"
-              className="group"
-            >
-              <span>Get Started</span>
-              <HiArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button
+                onClick={handleLogin}
+                size="lg"
+                className="group"
+              >
+                <span>Get Started</span>
+                <HiArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Button>
 
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => window.location.href = '/how-it-works'}
-            >
-              See How It Works
-            </Button>
-          </div>
-        </motion.div>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => window.location.href = '/how-it-works'}
+              >
+                See How It Works
+              </Button>
+            </div>
+          </motion.div>
 
-        {/* Features Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mt-16"
-        >
-          {features.map((feature, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 + index * 0.1 }}
-              className="group p-6 rounded-lg bg-card border border-border hover:border-primary/50 hover:shadow-lg transition-all duration-300"
-            >
-              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                <div className="text-primary">
-                  {feature.icon}
+          {/* Right Column - Image Placeholder */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="hidden lg:block"
+          >
+            <div className="aspect-square rounded-2xl border-2 border-dashed border-border bg-muted/30 p-12 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-24 h-24 bg-primary/10 rounded-2xl mx-auto mb-6 flex items-center justify-center">
+                  <svg className="w-12 h-12 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
                 </div>
+                <p className="text-sm text-muted-foreground font-medium">Hero Image Placeholder</p>
+                <p className="text-xs text-muted-foreground mt-2">Upload your image here</p>
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                {feature.title}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {feature.description}
-              </p>
-            </motion.div>
-          ))}
-        </motion.div>
+            </div>
+          </motion.div>
+        </div>
 
         {/* Footer */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.8 }}
-          className="mt-20 flex flex-col items-center gap-3"
+          className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-3"
         >
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <button onClick={() => window.location.href = '/terms'} className="hover:text-foreground transition-colors">Terms of Service</button>
-            <button onClick={() => window.location.href = '/privacy'} className="hover:text-foreground transition-colors">Privacy Policy</button>
+            <button onClick={() => window.location.href = '/terms'} className="hover:text-foreground transition-colors">
+              Terms of Service
+            </button>
+            <button onClick={() => window.location.href = '/privacy'} className="hover:text-foreground transition-colors">
+              Privacy Policy
+            </button>
           </div>
           <p className="text-sm text-muted-foreground">© 2026 HardCoders</p>
         </motion.div>
