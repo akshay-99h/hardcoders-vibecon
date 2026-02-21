@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  ArrowRight01Icon, 
-  Sun03Icon, 
-  Moon02Icon, 
-  SecurityCheckIcon,
-  Tick02Icon,
-  Sparkles01Icon
-} from 'hugeicons-react';
+  HiArrowRight, 
+  HiSun, 
+  HiMoon, 
+  HiShieldCheck,
+  HiCheckCircle,
+  HiSparkles
+} from 'react-icons/hi2';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 
