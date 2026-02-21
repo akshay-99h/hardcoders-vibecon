@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
-  HiPlus, HiTrash, HiMenu, HiSun, HiMoon,
-  HiPaperClip, HiMicrophone, HiPaperAirplane,
-  HiChatAlt2, HiLogout, HiVolumeUp, HiClipboardCopy, HiCheck
-} from 'react-icons/hi';
+  Add01Icon, Delete02Icon, Menu01Icon, Sun03Icon, Moon02Icon,
+  AttachmentIcon, Mic01Icon, ArrowRight01Icon,
+  MessageMultiple01Icon, Logout01Icon, VolumeHighIcon, Copy01Icon, Tick02Icon, Call02Icon, Download01Icon
+} from 'hugeicons-react';
 import api from '../utils/api';
 
 function ChatInterface() {
@@ -26,18 +26,30 @@ function ChatInterface() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [isInVoiceMode, setIsInVoiceMode] = useState(false);
+  const [voiceCallId, setVoiceCallId] = useState(null);
+  const [voiceState, setVoiceState] = useState('idle'); // idle, listening, thinking, speaking
+  const [voiceVolume, setVoiceVolume] = useState(0); // Track mic volume for visual feedback
+  const [isUserSpeaking, setIsUserSpeaking] = useState(false); // Track if user is actively speaking
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const fileInputRef = useRef(null);
+  const streamRef = useRef(null);
+  const isInVoiceModeRef = useRef(false); // Track voice mode for callbacks
 
   useEffect(() => {
     handleAuthCallback();
     
-    // Cleanup speech synthesis on unmount
+    // Cleanup speech synthesis and voice mode on unmount
     return () => {
       if (window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
+      }
+      
+      // Cleanup voice mode if active
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
@@ -178,6 +190,353 @@ function ChatInterface() {
       setInputMessage(response.data.text);
     } catch (error) {
       console.error('Transcription error:', error);
+    }
+  };
+
+  // ============== CHATGPT-STYLE VOICE CONVERSATION ==============
+  
+  const startVoiceConversation = async () => {
+    try {
+      // Start AI call session
+      const response = await api.post('/api/ai-call/start', {
+        conversation_id: currentConversation,
+        language: selectedLanguage
+      });
+      
+      setVoiceCallId(response.data.call_id);
+      setIsInVoiceMode(true);
+      isInVoiceModeRef.current = true; // Update ref for callbacks
+      setVoiceState('listening');
+      
+      // Start listening immediately
+      await startVoiceListening();
+    } catch (error) {
+      console.error('Failed to start voice conversation:', error);
+      alert('Failed to start voice conversation. Please try again.');
+    }
+  };
+  
+  const startVoiceListening = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      
+      streamRef.current = stream;
+      
+      // Determine supported mime type
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          mimeType = 'audio/ogg';
+        }
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      // Enhanced Voice Activity Detection (VAD)
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioStreamSource = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.8;
+      
+      audioStreamSource.connect(analyser);
+      
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      let silenceStart = null;
+      let speechDetected = false;
+      let consecutiveSilenceFrames = 0;
+      
+      // Balanced thresholds - not too sensitive, not too slow
+      const SPEECH_THRESHOLD = 15; // Good threshold
+      const SILENCE_FRAMES_NEEDED = 120; // ~2-3 seconds at 60fps (balanced)
+      const MIN_SPEECH_FRAMES = 30; // Minimum frames of speech before considering silence
+      let speechFrames = 0;
+      
+      const detectSound = () => {
+        if (!isInVoiceModeRef.current || !mediaRecorder || mediaRecorder.state !== 'recording') {
+          if (audioContext.state !== 'closed') {
+            audioContext.close();
+          }
+          return;
+        }
+        
+        analyser.getByteTimeDomainData(dataArray);
+        
+        // Calculate RMS (Root Mean Square) for more accurate volume
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          const normalized = (dataArray[i] - 128) / 128;
+          sum += normalized * normalized;
+        }
+        const rms = Math.sqrt(sum / bufferLength);
+        const volume = rms * 100;
+        
+        // Update volume indicator for visual feedback
+        setVoiceVolume(Math.min(100, volume * 3)); // Amplify for visibility
+        
+        // Detect speech
+        if (volume > SPEECH_THRESHOLD) {
+          speechFrames++;
+          consecutiveSilenceFrames = 0;
+          
+          if (!speechDetected && speechFrames > MIN_SPEECH_FRAMES) {
+            speechDetected = true;
+            setIsUserSpeaking(true); // Show "Speaking..." in UI
+            console.log('🎤 Speech detected, monitoring for end...');
+          }
+          
+          silenceStart = null;
+        } else if (speechDetected) {
+          // We've detected speech before, now checking for silence
+          consecutiveSilenceFrames++;
+          
+          if (consecutiveSilenceFrames >= SILENCE_FRAMES_NEEDED) {
+            setIsUserSpeaking(false); // Hide "Speaking..."
+            console.log('🔇 Silence detected after speech - auto-sending');
+            if (audioContext.state !== 'closed') {
+              audioContext.close();
+            }
+            stopVoiceListening();
+            return;
+          }
+        }
+        
+        // Continue monitoring
+        requestAnimationFrame(detectSound);
+      };
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = async () => {
+        // Cleanup audio context
+        if (audioContext.state !== 'closed') {
+          audioContext.close();
+        }
+        
+        if (!isInVoiceModeRef.current) return;
+        
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        
+        // Check if audio has actual speech (not just noise)
+        // Minimum size check - at least 10KB for meaningful speech
+        if (audioBlob.size < 10000) {
+          console.log('Audio too small (likely just noise), restarting...');
+          setVoiceState('listening');
+          await startVoiceListening();
+          return;
+        }
+        
+        // Check if we detected actual speech during recording
+        if (!speechDetected || speechFrames < MIN_SPEECH_FRAMES) {
+          console.log('No meaningful speech detected, restarting...');
+          setVoiceState('listening');
+          await startVoiceListening();
+          return;
+        }
+        
+        await processVoiceTurn(audioBlob);
+      };
+      
+      // Start recording with timeslice for better data capture
+      mediaRecorder.start(100);
+      setVoiceState('listening');
+      
+      // Start VAD monitoring
+      requestAnimationFrame(detectSound);
+      
+      // Safety fallback - if no activity detected in 15 seconds, auto-send
+      setTimeout(() => {
+        if (mediaRecorder.state === 'recording' && isInVoiceModeRef.current) {
+          if (speechDetected) {
+            console.log('⏱️ Auto-sending after 15 seconds');
+            stopVoiceListening();
+          }
+        }
+      }, 15000);
+      
+    } catch (error) {
+      console.error('Failed to start voice listening:', error);
+      alert(`Microphone error: ${error.message}`);
+      endVoiceConversation();
+    }
+  };
+  
+  const stopVoiceListening = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+  
+  const processVoiceTurn = async (audioBlob) => {
+    setVoiceState('thinking');
+    setIsUserSpeaking(false); // Hide "Speaking..." indicator
+    
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'voice.webm');
+      
+      // Show transcribing indicator
+      console.log('📤 Sending audio to backend...');
+      
+      const response = await api.post(`/api/ai-call/turn?call_id=${voiceCallId}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      const { transcribed_text, response_text } = response.data;
+      
+      console.log('✅ Received response from backend');
+      
+      // Create messages
+      const userMessage = {
+        role: 'user',
+        content: transcribed_text,
+        timestamp: new Date().toISOString(),
+        fromVoice: true
+      };
+      
+      const aiMessage = {
+        role: 'assistant',
+        content: response_text,
+        timestamp: new Date().toISOString(),
+        fromVoice: true
+      };
+      
+      // ✅ Show user message FIRST (immediately)
+      setMessages(prev => [...prev, userMessage]);
+      
+      // Small delay then show AI response (feels more natural)
+      setTimeout(() => {
+        setMessages(prev => [...prev, aiMessage]);
+      }, 100);
+      
+      // Update conversation ID if this was a new conversation
+      if (!currentConversation && response.data.conversation_id) {
+        setCurrentConversation(response.data.conversation_id);
+        fetchConversations();
+      }
+      
+      // Play AI response using BROWSER TEXT-TO-SPEECH
+      setVoiceState('speaking');
+      
+      // Clean text for better speech
+      let cleanText = response_text;
+      // Remove emojis
+      cleanText = cleanText.replace(/[\u{1F600}-\u{1F64F}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F300}-\u{1F5FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F680}-\u{1F6FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F700}-\u{1F77F}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F780}-\u{1F7FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F800}-\u{1F8FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F900}-\u{1F9FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1FA00}-\u{1FA6F}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1FA70}-\u{1FAFF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{2600}-\u{26FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{2700}-\u{27BF}]/gu, '');
+      
+      // Use browser's native speech synthesis
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      
+      // Load voices (may not be immediately available)
+      let voices = window.speechSynthesis.getVoices();
+      
+      // If voices not loaded, wait for them
+      if (voices.length === 0) {
+        await new Promise(resolve => {
+          window.speechSynthesis.onvoiceschanged = () => {
+            voices = window.speechSynthesis.getVoices();
+            resolve();
+          };
+        });
+      }
+      
+      // Try to get a good female voice (prefer Google voices if available)
+      const femaleVoice = voices.find(voice => 
+        (voice.name.includes('Google') && (voice.name.includes('female') || voice.name.includes('US') || voice.name.includes('UK'))) ||
+        voice.name.toLowerCase().includes('samantha') ||
+        voice.name.toLowerCase().includes('zira') ||
+        voice.name.toLowerCase().includes('microsoft zira') ||
+        (voice.lang.includes('hi') && voice.name.includes('Google')) // Hindi voice
+      ) || voices.find(voice => voice.lang.startsWith('en')) || voices[0];
+      
+      if (femaleVoice) {
+        utterance.voice = femaleVoice;
+        console.log('Using voice:', femaleVoice.name);
+      }
+      
+      // Natural speech settings
+      utterance.rate = 1.1; // Slightly faster for better flow
+      utterance.pitch = 1.1; // Slightly higher for female voice
+      utterance.volume = 1.0;
+      
+      utterance.onend = () => {
+        // Continue the conversation loop
+        if (isInVoiceModeRef.current) {
+          setVoiceState('listening');
+          startVoiceListening();
+        }
+      };
+      
+      utterance.onerror = (e) => {
+        console.error('Speech synthesis error:', e);
+        // Continue even if speech fails
+        if (isInVoiceModeRef.current) {
+          setVoiceState('listening');
+          startVoiceListening();
+        }
+      };
+      
+      window.speechSynthesis.speak(utterance);
+      
+    } catch (error) {
+      console.error('Voice turn error:', error);
+      alert(`Voice conversation error: ${error.response?.data?.detail || error.message}`);
+      endVoiceConversation();
+    }
+  };
+  
+  const endVoiceConversation = async () => {
+    setIsInVoiceMode(false);
+    isInVoiceModeRef.current = false; // Update ref for callbacks
+    setVoiceState('idle');
+    setVoiceVolume(0); // Reset volume indicator
+    setIsUserSpeaking(false); // Reset speaking indicator
+    
+    // Stop recording if active
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    
+    // Stop browser speech synthesis if active
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+    }
+    
+    // Release microphone
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    // End call session on backend
+    if (voiceCallId) {
+      try {
+        await api.post('/api/ai-call/end', { call_id: voiceCallId });
+      } catch (error) {
+        console.error('Error ending call:', error);
+      }
+      setVoiceCallId(null);
     }
   };
 
@@ -466,6 +825,167 @@ function ChatInterface() {
       console.error('Failed to copy:', error);
     }
   };
+  
+  const handleDownloadPDF = async (message) => {
+    try {
+      // Extract only the document portion (remove AI explanations)
+      const cleanDocument = extractDocumentOnly(message.content);
+      
+      if (!cleanDocument) {
+        alert('Could not extract document. Please try copying the text manually.');
+        return;
+      }
+      
+      // Detect document type
+      let documentType = "Document";
+      const content = cleanDocument.toLowerCase();
+      
+      if (content.includes("rti") || content.includes("right to information")) {
+        documentType = "RTI_Application";
+      } else if (content.includes("complaint")) {
+        documentType = "Complaint_Letter";
+      } else if (content.includes("grievance")) {
+        documentType = "Grievance_Text";
+      } else if (content.includes("appeal")) {
+        documentType = "First_Appeal_RTI";
+      } else if (content.includes("subject:") && content.includes("dear")) {
+        documentType = "Email_Draft";
+      }
+      
+      // Call PDF generation API
+      const response = await api.post('/api/generate-pdf', {
+        document_type: documentType,
+        document_content: cleanDocument,
+        user_name: "Citizen"
+      }, {
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${documentType}_${Date.now()}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
+    }
+  };
+  
+  // Extract only the document portion from AI response
+  const extractDocumentOnly = (text) => {
+    // Common patterns that indicate document start
+    const startPatterns = [
+      /^To,?\s*$/m,
+      /^Subject:/m,
+      /^The\s+(?:Central|State)\s+Public\s+Information\s+Officer/m,
+      /^Respected\s+Sir\/Madam,?$/m,
+      /^Dear\s+/m,
+      /^I,?\s+\[?[A-Z]/m  // "I, [Name]" pattern
+    ];
+    
+    // Common patterns that indicate document end
+    const endPatterns = [
+      /^Enclosures?:/m,
+      /^---+$/m,
+      /^Your\s+(?:RTI|complaint|document|email)/mi,
+      /^I've\s+(?:generated|created|drafted)/mi,
+      /^This\s+(?:document|letter|application)/mi,
+      /^Please\s+(?:print|send|file)/mi,
+      /^You\s+can\s+(?:now|download)/mi,
+      /^\*\*(?:Instructions?|Next\s+Steps?|Important)/mi
+    ];
+    
+    let documentStart = -1;
+    let documentEnd = text.length;
+    
+    // Find document start
+    for (const pattern of startPatterns) {
+      const match = text.match(pattern);
+      if (match && match.index !== undefined) {
+        documentStart = match.index;
+        break;
+      }
+    }
+    
+    // If no start found, check if entire message is a document (starts with To, or Subject:)
+    if (documentStart === -1) {
+      const firstLine = text.split('\n')[0].trim();
+      if (firstLine.match(/^(?:To,?|Subject:|Respected|Dear)/i)) {
+        documentStart = 0;
+      }
+    }
+    
+    if (documentStart === -1) {
+      return null; // Not a document
+    }
+    
+    // Find document end (look for explanatory text after document)
+    const textAfterStart = text.substring(documentStart);
+    for (const pattern of endPatterns) {
+      const match = textAfterStart.match(pattern);
+      if (match && match.index !== undefined && match.index > 100) { // At least 100 chars in
+        documentEnd = documentStart + match.index;
+        break;
+      }
+    }
+    
+    // Extract document portion
+    let document = text.substring(documentStart, documentEnd).trim();
+    
+    // Remove any trailing explanation lines
+    const lines = document.split('\n');
+    let lastValidLine = lines.length;
+    
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim().toLowerCase();
+      
+      // Stop if we hit explanatory text
+      if (
+        line.startsWith('your ') ||
+        line.startsWith('this ') ||
+        line.startsWith('please ') ||
+        line.startsWith('you can') ||
+        line.startsWith('i\'ve ') ||
+        line.startsWith('**') ||
+        line.includes('download') ||
+        line.includes('ready above')
+      ) {
+        lastValidLine = i;
+      } else if (line.length > 10) {
+        // Found actual content, stop
+        break;
+      }
+    }
+    
+    document = lines.slice(0, lastValidLine).join('\n').trim();
+    
+    return document;
+  };
+  
+  // Check if message is a generated document
+  const isGeneratedDocument = (message) => {
+    if (message.role !== 'assistant') return false;
+    
+    const content = message.content.toLowerCase();
+    const indicators = [
+      'to,',
+      'subject:',
+      'sir/madam',
+      'yours faithfully',
+      'thanking you',
+      'application under',
+      'grievance regarding',
+      'complaint regarding'
+    ];
+    
+    return indicators.some(indicator => content.includes(indicator)) && content.length > 200;
+  };
 
   // Show loading screen while authenticating
   if (isAuthenticating) {
@@ -489,7 +1009,7 @@ function ChatInterface() {
             onClick={handleNewChat}
             className="w-full bg-primary text-primary-foreground px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
           >
-            <HiPlus size={20} />
+            <Add01Icon size={20} />
             <span>New Chat</span>
           </button>
         </div>
@@ -515,7 +1035,7 @@ function ChatInterface() {
                   onClick={(e) => handleDeleteConversation(conv.conversation_id, e)}
                   className="opacity-0 group-hover:opacity-100 text-destructive p-1 hover:bg-destructive/10 rounded transition-all"
                 >
-                  <HiTrash size={16} />
+                  <Delete02Icon size={16} />
                 </button>
               </div>
             </button>
@@ -540,7 +1060,7 @@ function ChatInterface() {
             onClick={handleLogout}
             className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
           >
-            <HiLogout size={16} />
+            <Logout01Icon size={16} />
             <span>Logout</span>
           </button>
         </div>
@@ -555,7 +1075,7 @@ function ChatInterface() {
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
-              <HiMenu size={20} />
+              <Menu01Icon size={20} />
             </button>
             <div>
               <h1 className="text-lg font-bold text-foreground">RakshaAI Chat</h1>
@@ -581,7 +1101,7 @@ function ChatInterface() {
               onClick={toggleTheme}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
-              {isDark ? <HiSun size={20} /> : <HiMoon size={20} />}
+              {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
             </button>
           </div>
         </header>
@@ -592,7 +1112,7 @@ function ChatInterface() {
             {messages.length === 0 && (
               <div className="text-center py-12">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <HiChatAlt2 size={32} className="text-primary" />
+                  <MessageMultiple01Icon size={32} className="text-primary" />
                 </div>
                 <h2 className="text-xl font-bold text-foreground mb-2">Start a conversation</h2>
                 <p className="text-muted-foreground">Ask me anything about government services</p>
@@ -612,6 +1132,14 @@ function ChatInterface() {
                         : 'bg-card text-card-foreground border border-border'
                     }`}
                   >
+                    {/* Voice indicator badge */}
+                    {message.fromVoice && (
+                      <div className="flex items-center gap-1 mb-1 text-xs opacity-70">
+                        <Mic01Icon size={12} />
+                        <span>Voice</span>
+                      </div>
+                    )}
+                    
                     {message.role === 'user' ? (
                       <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                     ) : (
@@ -631,7 +1159,7 @@ function ChatInterface() {
                         className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
                         title={speakingMessageId === message.timestamp ? "Stop speaking" : "Read aloud"}
                       >
-                        <HiVolumeUp 
+                        <VolumeHighIcon 
                           size={16} 
                           className={speakingMessageId === message.timestamp ? 'text-primary animate-pulse' : ''}
                         />
@@ -643,11 +1171,22 @@ function ChatInterface() {
                         title={copiedMessageId === message.timestamp ? "Copied!" : "Copy to clipboard"}
                       >
                         {copiedMessageId === message.timestamp ? (
-                          <HiCheck size={16} className="text-green-500" />
+                          <Tick02Icon size={16} className="text-green-500" />
                         ) : (
-                          <HiClipboardCopy size={16} />
+                          <Copy01Icon size={16} />
                         )}
                       </button>
+                      
+                      {/* PDF Download button - only for generated documents */}
+                      {isGeneratedDocument(message) && (
+                        <button
+                          onClick={() => handleDownloadPDF(message)}
+                          className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                          title="Download as PDF"
+                        >
+                          <Download01Icon size={16} />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -665,6 +1204,16 @@ function ChatInterface() {
                 </div>
               </div>
             )}
+            
+            {/* Show "Speaking..." indicator while user is actively speaking in voice mode */}
+            {isInVoiceMode && isUserSpeaking && (
+              <div className="flex justify-end animate-fade-in">
+                <div className="bg-purple-500 text-white rounded-[1.4rem] px-5 py-3 flex items-center gap-2">
+                  <Mic01Icon size={16} className="animate-pulse" />
+                  <span className="text-sm">Speaking...</span>
+                </div>
+              </div>
+            )}
 
             <div ref={messagesEndRef} />
           </div>
@@ -673,12 +1222,74 @@ function ChatInterface() {
         {/* Input Area - Fixed at Bottom */}
         <div className="bg-card border-t border-border p-4 flex-shrink-0">
           <div className="max-w-4xl mx-auto">
+            {/* Voice Conversation Mode UI */}
+            {isInVoiceMode && (
+              <div className="mb-4 p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border-2 border-purple-500/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                        voiceState === 'listening' ? 'bg-purple-500' :
+                        voiceState === 'thinking' ? 'bg-yellow-500' :
+                        voiceState === 'speaking' ? 'bg-blue-500' : 'bg-gray-500'
+                      }`}>
+                        {voiceState === 'listening' && (
+                          <div className="absolute inset-0 bg-purple-400 rounded-full animate-ping opacity-75"></div>
+                        )}
+                        {voiceState === 'speaking' && (
+                          <div className="absolute inset-0 bg-blue-400 rounded-full animate-pulse"></div>
+                        )}
+                        <Mic01Icon className="text-white relative z-10" size={32} />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">
+                        {voiceState === 'listening' && 'Listening...'}
+                        {voiceState === 'thinking' && 'Processing...'}
+                        {voiceState === 'speaking' && 'RakshaAI is speaking...'}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {voiceState === 'listening' && 'Speak naturally - I\'ll detect when you\'re done'}
+                        {voiceState === 'thinking' && 'Analyzing your question...'}
+                        {voiceState === 'speaking' && 'Listen to the response...'}
+                      </p>
+                      {/* Volume indicator */}
+                      {voiceState === 'listening' && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-purple-500 transition-all duration-75"
+                              style={{ width: `${voiceVolume}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8">
+                            {voiceVolume > 8 ? '🎤' : '...'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <button
+                      onClick={endVoiceConversation}
+                      className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:opacity-90 transition-all"
+                      title="End voice conversation"
+                    >
+                      End Call
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* File Preview */}
-            {selectedFile && (
+            {!isInVoiceMode && selectedFile && (
               <div className="mb-3 p-3 bg-muted rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center">
-                    <HiPaperClip className="text-primary" size={20} />
+                    <AttachmentIcon className="text-primary" size={20} />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
@@ -692,65 +1303,77 @@ function ChatInterface() {
                   className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
                   title="Remove file"
                 >
-                  <HiTrash size={18} />
+                  <Delete02Icon size={18} />
                 </button>
               </div>
             )}
             
-            <div className="flex items-end gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
-                title="Upload document (legal notice, certificate, etc.)"
-              >
-                <HiPaperClip size={20} />
-              </button>
-
-              <button
-                onClick={isRecording ? handleStopRecording : handleStartRecording}
-                className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
-                  isRecording
-                    ? 'bg-destructive text-destructive-foreground animate-pulse'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-                title="Voice input"
-              >
-                <HiMicrophone size={20} />
-              </button>
-
-              <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
-                <textarea
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder={selectedFile ? "Add a question about the document (optional)..." : "Type your message..."}
-                  className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
-                  rows={1}
-                  style={{ maxHeight: '120px' }}
+            {/* Regular Input Controls (Hidden in Voice Mode) */}
+            {!isInVoiceMode && (
+              <div className="flex items-end gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+                  onChange={handleFileSelect}
+                  className="hidden"
                 />
-              </div>
+                
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
+                  title="Upload document (legal notice, certificate, etc.)"
+                >
+                  <AttachmentIcon size={20} />
+                </button>
 
-              <button
-                onClick={handleSendMessage}
-                disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
-                className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
-                title={selectedFile ? "Analyze document" : "Send message"}
-              >
-                {isAnalyzing ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <HiPaperAirplane size={20} />
-                )}
-              </button>
-            </div>
+                <button
+                  onClick={isRecording ? handleStopRecording : handleStartRecording}
+                  className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
+                    isRecording
+                      ? 'bg-destructive text-destructive-foreground animate-pulse'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`}
+                  title="Voice to text"
+                >
+                  <Mic01Icon size={20} />
+                </button>
+
+                <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
+                  <textarea
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder={selectedFile ? "Add a question about the document (optional)..." : "Type your message..."}
+                    className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
+                    rows={1}
+                    style={{ maxHeight: '120px' }}
+                  />
+                </div>
+
+                <button
+                  onClick={handleSendMessage}
+                  disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
+                  className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                  title={selectedFile ? "Analyze document" : "Send message"}
+                >
+                  {isAnalyzing ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <ArrowRight01Icon size={20} />
+                  )}
+                </button>
+                
+                {/* ChatGPT-style inline voice conversation button */}
+                <button
+                  onClick={startVoiceConversation}
+                  className="p-3 bg-gradient-to-br from-purple-500 to-blue-500 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all flex-shrink-0"
+                  title="Start AI voice conversation"
+                >
+                  <Call02Icon size={20} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

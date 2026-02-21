@@ -1,7 +1,7 @@
 # Test Results - RakshaAI Website
 
 ## Test Date: 2026-02-21
-## Base URL: https://raksha-india-gov.preview.emergentagent.com
+## Base URL: https://rti-helper-bot.preview.emergentagent.com
 ## Testing Agent: E2 (Frontend Testing Agent)
 
 ---

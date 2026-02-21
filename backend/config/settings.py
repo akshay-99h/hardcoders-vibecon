@@ -15,8 +15,8 @@ class Settings:
     
     # Voice configuration
     STT_MODEL = "whisper-1"
-    TTS_MODEL = "tts-1"
-    TTS_VOICE = "nova"
+    TTS_MODEL = "tts-1-hd"  # Higher quality model for more natural voice
+    TTS_VOICE = "shimmer"  # Natural, warm female voice
     
     # Session configuration
     SESSION_EXPIRY_DAYS = 7
