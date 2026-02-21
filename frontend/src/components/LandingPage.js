@@ -39,8 +39,8 @@ function LandingPage() {
       {/* LEFT SIDE - Clean Google-style SaaS UI with background pattern (50%) */}
       <div className="w-full md:w-1/2 bg-background flex flex-col justify-between items-center px-8 md:px-16 lg:px-24 py-12 md:py-16 relative overflow-hidden">
         {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none select-none overflow-hidden">
-          <div className="absolute inset-0 text-xs font-mono text-foreground whitespace-pre" style={{ 
+        <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.08] pointer-events-none select-none overflow-hidden">
+          <div className="absolute inset-0 text-xs font-mono text-foreground dark:text-gray-500 whitespace-pre" style={{ 
             lineHeight: '1.8',
             letterSpacing: '0.3em',
             transform: 'rotate(-12deg) scale(1.5)',
@@ -57,7 +57,7 @@ function LandingPage() {
             {Array(100).fill(null).map((_, i) => (
               <div
                 key={i}
-                className="absolute text-foreground opacity-20"
+                className="absolute text-foreground dark:text-gray-600 opacity-20 dark:opacity-30"
                 style={{
                   left: `${Math.random() * 100}%`,
                   top: `${Math.random() * 100}%`,
