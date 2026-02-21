@@ -26,8 +26,7 @@ function ChatInterface() {
   const audioChunksRef = useRef([]);
 
   useEffect(() => {
-    checkAuth();
-    fetchConversations();
+    handleAuthCallback();
   }, []);
 
   useEffect(() => {
@@ -42,11 +41,48 @@ function ChatInterface() {
     scrollToBottom();
   }, [messages]);
 
+  const handleAuthCallback = async () => {
+    // Check if there's a session_id in the URL hash (OAuth callback)
+    const hash = window.location.hash;
+    if (hash && hash.includes('session_id')) {
+      try {
+        const params = new URLSearchParams(hash.substring(1));
+        const sessionId = params.get('session_id');
+        
+        if (sessionId) {
+          // Exchange session_id for session_token
+          const response = await api.post('/api/auth/session', {
+            session_id: sessionId,
+          });
+          
+          const userData = response.data;
+          setUser(userData);
+          
+          // Clear the hash from URL
+          window.history.replaceState(null, '', window.location.pathname);
+          
+          // Fetch conversations after successful auth
+          fetchConversations();
+          return;
+        }
+      } catch (error) {
+        console.error('Auth callback error:', error);
+        navigate('/');
+        return;
+      }
+    }
+    
+    // If no session_id in URL, check existing auth
+    checkAuth();
+  };
+
   const checkAuth = async () => {
     try {
       const response = await api.get('/api/auth/me');
       setUser(response.data);
+      fetchConversations();
     } catch (error) {
+      console.error('Auth check failed:', error);
       navigate('/');
     }
   };
