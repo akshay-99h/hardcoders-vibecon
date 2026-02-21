@@ -186,6 +186,191 @@ function ChatInterface() {
     }
   };
 
+  // ============== CHATGPT-STYLE VOICE CONVERSATION ==============
+  
+  const startVoiceConversation = async () => {
+    try {
+      // Start AI call session
+      const response = await api.post('/api/ai-call/start', {
+        conversation_id: currentConversation,
+        language: selectedLanguage
+      });
+      
+      setVoiceCallId(response.data.call_id);
+      setIsInVoiceMode(true);
+      setVoiceState('listening');
+      
+      // Start listening immediately
+      await startVoiceListening();
+    } catch (error) {
+      console.error('Failed to start voice conversation:', error);
+      alert('Failed to start voice conversation. Please try again.');
+    }
+  };
+  
+  const startVoiceListening = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      
+      streamRef.current = stream;
+      
+      // Determine supported mime type
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          mimeType = 'audio/ogg';
+        }
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = async () => {
+        if (!isInVoiceMode) return; // Exit if voice mode was ended
+        
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        
+        if (audioBlob.size > 0) {
+          await processVoiceTurn(audioBlob);
+        } else {
+          // Empty audio, restart listening
+          setVoiceState('listening');
+          await startVoiceListening();
+        }
+      };
+      
+      mediaRecorder.start();
+      setVoiceState('listening');
+      
+      // Auto-stop after 10 seconds (user can also tap to send earlier)
+      setTimeout(() => {
+        if (mediaRecorder.state === 'recording' && isInVoiceMode) {
+          stopVoiceListening();
+        }
+      }, 10000);
+      
+    } catch (error) {
+      console.error('Failed to start voice listening:', error);
+      alert(`Microphone error: ${error.message}`);
+      endVoiceConversation();
+    }
+  };
+  
+  const stopVoiceListening = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+  
+  const processVoiceTurn = async (audioBlob) => {
+    setVoiceState('thinking');
+    
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'voice.webm');
+      
+      const response = await api.post(`/api/ai-call/turn?call_id=${voiceCallId}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      const { transcribed_text, response_text, response_audio_base64 } = response.data;
+      
+      // Add user message to chat (transcribed)
+      setMessages(prev => [...prev, {
+        role: 'user',
+        content: transcribed_text,
+        timestamp: new Date().toISOString(),
+        fromVoice: true
+      }]);
+      
+      // Add AI response to chat
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response_text,
+        timestamp: new Date().toISOString(),
+        fromVoice: true
+      }]);
+      
+      // Update conversation ID if this was a new conversation
+      if (!currentConversation && response.data.conversation_id) {
+        setCurrentConversation(response.data.conversation_id);
+        fetchConversations();
+      }
+      
+      // Play AI audio response
+      setVoiceState('speaking');
+      const audio = new Audio(`data:audio/mp3;base64,${response_audio_base64}`);
+      voiceAudioRef.current = audio;
+      
+      audio.onended = () => {
+        // Continue the conversation loop
+        if (isInVoiceMode) {
+          setVoiceState('listening');
+          startVoiceListening();
+        }
+      };
+      
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
+        // Continue even if audio fails
+        if (isInVoiceMode) {
+          setVoiceState('listening');
+          startVoiceListening();
+        }
+      };
+      
+      audio.play();
+      
+    } catch (error) {
+      console.error('Voice turn error:', error);
+      alert(`Voice conversation error: ${error.response?.data?.detail || error.message}`);
+      endVoiceConversation();
+    }
+  };
+  
+  const endVoiceConversation = async () => {
+    setIsInVoiceMode(false);
+    setVoiceState('idle');
+    
+    // Stop recording if active
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    
+    // Stop audio playback if active
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current = null;
+    }
+    
+    // Release microphone
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    // End call session on backend
+    if (voiceCallId) {
+      try {
+        await api.post('/api/ai-call/end', { call_id: voiceCallId });
+      } catch (error) {
+        console.error('Error ending call:', error);
+      }
+      setVoiceCallId(null);
+    }
+  };
+
   const handleSendMessage = async () => {
     // If file is selected, do document analysis instead
     if (selectedFile) {
