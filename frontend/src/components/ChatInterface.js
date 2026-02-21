@@ -421,18 +421,31 @@ function ChatInterface() {
       // Use browser's native speech synthesis
       const utterance = new SpeechSynthesisUtterance(cleanText);
       
-      // Try to get a female voice
-      const voices = window.speechSynthesis.getVoices();
+      // Load voices (may not be immediately available)
+      let voices = window.speechSynthesis.getVoices();
+      
+      // If voices not loaded, wait for them
+      if (voices.length === 0) {
+        await new Promise(resolve => {
+          window.speechSynthesis.onvoiceschanged = () => {
+            voices = window.speechSynthesis.getVoices();
+            resolve();
+          };
+        });
+      }
+      
+      // Try to get a good female voice (prefer Google voices if available)
       const femaleVoice = voices.find(voice => 
-        voice.name.toLowerCase().includes('female') || 
+        (voice.name.includes('Google') && (voice.name.includes('female') || voice.name.includes('US') || voice.name.includes('UK'))) ||
         voice.name.toLowerCase().includes('samantha') ||
         voice.name.toLowerCase().includes('zira') ||
-        voice.name.toLowerCase().includes('google हिन्दी') ||
-        voice.lang.includes('hi') // Hindi voice
-      );
+        voice.name.toLowerCase().includes('microsoft zira') ||
+        (voice.lang.includes('hi') && voice.name.includes('Google')) // Hindi voice
+      ) || voices.find(voice => voice.lang.startsWith('en')) || voices[0];
       
       if (femaleVoice) {
         utterance.voice = femaleVoice;
+        console.log('Using voice:', femaleVoice.name);
       }
       
       // Natural speech settings
