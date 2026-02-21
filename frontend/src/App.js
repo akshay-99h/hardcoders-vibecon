@@ -1,0 +1,36 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { LanguageProvider } from './contexts/LanguageContext';
+import './App.css';
+
+import LandingPage from './components/LandingPage';
+import AuthCallback from './components/AuthCallback';
+import ChatInterface from './components/ChatInterface';
+import HowItWorks from './components/HowItWorks';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsOfService from './components/TermsOfService';
+
+function AppRouter() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/how-it-works" element={<HowItWorks />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/chat" element={<ChatInterface />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <LanguageProvider>
+      <Router>
+        <AppRouter />
+      </Router>
+    </LanguageProvider>
+  );
+}
+
+export default App;

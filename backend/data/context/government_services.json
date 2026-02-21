@@ -1,0 +1,35 @@
+{
+  "category": "government_services",
+  "description": "Identity documents, certificates, and government-issued services",
+  "keywords": ["aadhaar", "pan", "passport", "driving license", "voter id", "ration card", "birth certificate", "death certificate", "caste certificate", "income certificate", "domicile", "marriage certificate"],
+  "portals": {
+    "aadhaar": {"url": "https://uidai.gov.in", "alt": "https://myaadhaar.uidai.gov.in", "helpline": "1947"},
+    "pan": {"url": "https://incometax.gov.in", "alt": "https://tin.nsdl.com", "helpline": "020-27218080"},
+    "passport": {"url": "https://passportindia.gov.in", "helpline": "1800-258-1800"},
+    "driving_license": {"url": "https://parivahan.gov.in", "alt": "https://sarathi.parivahan.gov.in"},
+    "voter_id": {"url": "https://voters.eci.gov.in", "helpline": "1800-111-950"},
+    "ration_card": {"url": "https://nfsa.gov.in", "note": "State-specific portals vary"},
+    "certificates": {"url": "https://edistrict.gov.in", "note": "State e-District portals for birth, death, caste, income, domicile certificates"}
+  },
+  "general_rules": [
+    "Always direct users to official .gov.in portals — never third-party agents",
+    "Most services available online via DigiLocker (https://digilocker.gov.in)",
+    "Common Service Centres (CSCs) available in rural areas for offline access",
+    "Fees vary by state for state-level certificates",
+    "All document updates require OTP on registered mobile number",
+    "For minors, parent/guardian documents are required"
+  ],
+  "common_patterns": {
+    "new_application": "Identify → Gather documents → Apply online/offline → Track status → Collect",
+    "update_correction": "Login to portal → Select update type → Upload proof → Pay fee → Track with URN",
+    "lost_duplicate": "File FIR/police complaint (if needed) → Apply for duplicate via portal → Pay fee",
+    "linking": "Visit issuing authority or use online portal → Authenticate with OTP/biometric → Confirm linking",
+    "verification_status": "Use portal tracking with application/reference number → Check SMS/email updates"
+  },
+  "escalation": {
+    "first": "Use portal grievance/complaint section",
+    "second": "Call respective helpline number",
+    "third": "File complaint on CPGRAMS (https://pgportal.gov.in)",
+    "fourth": "Approach local MP/MLA or district collector office"
+  }
+}
