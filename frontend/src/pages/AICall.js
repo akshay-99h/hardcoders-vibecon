@@ -42,32 +42,61 @@ function AICall() {
   
   const startRecording = async () => {
     try {
+      console.log('Starting recording...');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       });
       
+      console.log('Got media stream');
       streamRef.current = stream;
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      
+      // Check for supported mime types
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          mimeType = 'audio/ogg';
+        }
+      }
+      console.log('Using mime type:', mimeType);
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       
       mediaRecorder.ondataavailable = (event) => {
+        console.log('Data available, size:', event.data.size);
         if (event.data.size > 0) audioChunksRef.current.push(event.data);
       };
       
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await sendAudioToAI(audioBlob);
+        console.log('Recording stopped, chunks:', audioChunksRef.current.length);
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        console.log('Created blob, size:', audioBlob.size);
+        if (audioBlob.size > 0) {
+          await sendAudioToAI(audioBlob);
+        } else {
+          console.error('Empty audio blob!');
+          alert('No audio recorded. Please try again.');
+          setCallState('listening');
+          startRecording();
+        }
       };
       
       mediaRecorder.start();
       setIsRecording(true);
+      console.log('Recording started');
       
       setTimeout(() => {
-        if (mediaRecorder.state === 'recording') stopRecording();
+        if (mediaRecorder.state === 'recording') {
+          console.log('Auto-stopping recording after 10s');
+          stopRecording();
+        }
       }, 10000);
     } catch (err) {
       console.error('Failed to start recording:', err);
+      alert(`Microphone error: ${err.message}`);
       setCallState('ended');
     }
   };
