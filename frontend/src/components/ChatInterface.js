@@ -326,13 +326,24 @@ function ChatInterface() {
         
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         
-        if (audioBlob.size > 100) {
-          await processVoiceTurn(audioBlob);
-        } else {
-          console.log('No speech detected, restarting...');
+        // Check if audio has actual speech (not just noise)
+        // Minimum size check - at least 10KB for meaningful speech
+        if (audioBlob.size < 10000) {
+          console.log('Audio too small (likely just noise), restarting...');
           setVoiceState('listening');
           await startVoiceListening();
+          return;
         }
+        
+        // Check if we detected actual speech during recording
+        if (!speechDetected || speechFrames < MIN_SPEECH_FRAMES) {
+          console.log('No meaningful speech detected, restarting...');
+          setVoiceState('listening');
+          await startVoiceListening();
+          return;
+        }
+        
+        await processVoiceTurn(audioBlob);
       };
       
       // Start recording with timeslice for better data capture
