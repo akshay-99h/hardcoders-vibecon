@@ -207,6 +207,7 @@ function ChatInterface() {
       
       setVoiceCallId(response.data.call_id);
       setIsInVoiceMode(true);
+      isInVoiceModeRef.current = true; // Update ref for callbacks
       setVoiceState('listening');
       
       // Start listening immediately
