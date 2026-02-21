@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
+// CRITICAL: Use relative path for API calls
+// Kubernetes ingress automatically routes /api/* to backend:8001
+// Never hardcode URLs - this breaks in production
+const API_BASE_URL = '';  // Empty string for relative URLs
 
 const api = axios.create({
   baseURL: API_BASE_URL,
