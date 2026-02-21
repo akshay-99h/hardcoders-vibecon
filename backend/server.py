@@ -247,16 +247,27 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
     
     # Get conversation history if needed
     conversation_context = ""
+    document_context = ""
+    
     if chat_message.includeContext:
         messages = []
         async for msg in db.messages.find(
             {"conversation_id": conversation_id},
             {"_id": 0}
-        ).sort("timestamp", 1).limit(10):
+        ).sort("timestamp", 1).limit(20):
             messages.append(msg)
         
         if len(messages) > 1:
-            conversation_context = "\n".join([f"{m['role']}: {m['content']}" for m in messages[:-1]])
+            # Separate document context from regular conversation
+            regular_messages = []
+            for m in messages[:-1]:  # Exclude current user message
+                if m.get("is_document_context"):
+                    # Extract document context for better AI understanding
+                    document_context = m.get("content", "")
+                else:
+                    regular_messages.append(f"{m['role']}: {m['content']}")
+            
+            conversation_context = "\n".join(regular_messages)
     
     # Get knowledge base context for the user's query
     knowledge_context = context_service.get_context_for_query(chat_message.message)
@@ -266,7 +277,8 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
         result = await chat_agent.process({
             "user_input": chat_message.message,
             "previous_context": conversation_context,
-            "knowledge_context": knowledge_context
+            "knowledge_context": knowledge_context,
+            "document_context": document_context  # Pass document context if available
         })
         
         # Handle different response types
