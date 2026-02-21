@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
   Add01Icon, Delete02Icon, Menu01Icon, Sun03Icon, Moon02Icon,
-  AttachmentIcon, Mic01Icon, SendIcon,
+  AttachmentIcon, Mic01Icon, ArrowRight01Icon,
   MessageMultiple01Icon, Logout01Icon, VolumeHighIcon, Copy01Icon, Tick02Icon, Call02Icon, Download01Icon
 } from 'hugeicons-react';
 import api from '../utils/api';
