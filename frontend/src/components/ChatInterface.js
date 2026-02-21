@@ -257,10 +257,10 @@ function ChatInterface() {
       let speechDetected = false;
       let consecutiveSilenceFrames = 0;
       
-      // Tuned thresholds for better detection
-      const SPEECH_THRESHOLD = 8; // Lower threshold for better sensitivity
-      const SILENCE_FRAMES_NEEDED = 15; // ~1 second at 60fps
-      const MIN_SPEECH_FRAMES = 10; // Minimum frames of speech before considering silence
+      // Balanced thresholds - forgiving of natural pauses
+      const SPEECH_THRESHOLD = 12; // Balanced threshold
+      const SILENCE_FRAMES_NEEDED = 90; // ~3 seconds at 60fps (more forgiving)
+      const MIN_SPEECH_FRAMES = 20; // Minimum frames of speech before considering silence
       let speechFrames = 0;
       
       const detectSound = () => {
@@ -346,15 +346,15 @@ function ChatInterface() {
       // Start VAD monitoring
       requestAnimationFrame(detectSound);
       
-      // Aggressive fallback - if no activity detected in 8 seconds, auto-send
+      // Safety fallback - if no activity detected in 15 seconds, auto-send
       setTimeout(() => {
         if (mediaRecorder.state === 'recording' && isInVoiceModeRef.current) {
           if (speechDetected) {
-            console.log('⏱️ Auto-sending after 8 seconds');
+            console.log('⏱️ Auto-sending after 15 seconds');
             stopVoiceListening();
           }
         }
-      }, 8000);
+      }, 15000);
       
     } catch (error) {
       console.error('Failed to start voice listening:', error);
