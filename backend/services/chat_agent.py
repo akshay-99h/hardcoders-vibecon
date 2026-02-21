@@ -177,7 +177,7 @@ If the user is asking about creating/renewing documents like Aadhaar or PAN, pro
 Keep your response concise but complete."""
         
         try:
-            response = await self._call_llm(prompt)
+            response = await self.llm_service.send_message(prompt)
             
             # Return the helpful response
             return {
