@@ -783,6 +783,60 @@ async def end_ai_call(
     return {"message": "Call ended"}
 
 
+# ============================================================================
+# PDF GENERATION ENDPOINTS
+# ============================================================================
+
+class PDFGenerationRequest(BaseModel):
+    document_type: str
+    document_content: str
+    user_name: Optional[str] = "Citizen"
+
+
+@app.post("/api/generate-pdf")
+async def generate_pdf(
+    request: PDFGenerationRequest,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Generate PDF from document content
+    
+    Request body:
+    {
+        "document_type": "RTI Application",
+        "document_content": "Full document text...",
+        "user_name": "User Name" (optional)
+    }
+    
+    Returns: PDF file as download
+    """
+    try:
+        # Generate PDF
+        pdf_buffer = PDFGeneratorService.generate_document_pdf(
+            document_type=request.document_type,
+            document_content=request.document_content,
+            user_name=request.user_name
+        )
+        
+        # Create filename
+        filename = f"{request.document_type.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        # Return as downloadable file
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except Exception as e:
+        print(f"PDF generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
