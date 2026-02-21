@@ -250,6 +250,91 @@ function ChatInterface() {
     }
   };
 
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Check file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Please upload a valid image (JPEG, PNG, WEBP) or PDF file');
+        return;
+      }
+      
+      // Check file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('File size exceeds 10MB limit');
+        return;
+      }
+      
+      setSelectedFile(file);
+    }
+  };
+
+  const handleDocumentAnalysis = async () => {
+    if (!selectedFile) return;
+    
+    setIsAnalyzing(true);
+    setIsLoading(true);
+    
+    try {
+      // Add a system message indicating analysis is in progress
+      const userMsg = {
+        role: 'user',
+        content: `📄 Analyzing document: ${selectedFile.name}...`,
+        timestamp: new Date().toISOString(),
+        isDocument: true
+      };
+      setMessages(prev => [...prev, userMsg]);
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      if (inputMessage.trim()) {
+        formData.append('query', inputMessage.trim());
+      }
+      
+      // Call analysis API
+      const response = await api.post('/api/documents/analyze', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      // Add AI analysis response
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response.data.analysis,
+        timestamp: new Date().toISOString(),
+        isDocumentAnalysis: true
+      }]);
+      
+      // Clear file and input
+      setSelectedFile(null);
+      setInputMessage('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
+    } catch (error) {
+      console.error('Document analysis error:', error);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '❌ Failed to analyze document. Please ensure the image is clear and try again.',
+        timestamp: new Date().toISOString()
+      }]);
+    } finally {
+      setIsAnalyzing(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Show loading screen while authenticating
   if (isAuthenticating) {
     return (
