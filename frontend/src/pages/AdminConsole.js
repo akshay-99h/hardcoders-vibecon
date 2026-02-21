@@ -8,6 +8,8 @@ function AdminConsole() {
   const [user, setUser] = useState(null);
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState('');
 
@@ -15,12 +17,16 @@ function AdminConsole() {
 
   const loadData = async () => {
     try {
-      const [overviewRes, usersRes] = await Promise.all([
+      const [overviewRes, usersRes, eventsRes, subscriptionsRes] = await Promise.all([
         api.get('/api/admin/billing/overview'),
         api.get('/api/admin/users?limit=100'),
+        api.get('/api/admin/billing/events?limit=50'),
+        api.get('/api/admin/subscriptions?limit=100'),
       ]);
       setOverview(overviewRes.data);
       setUsers(usersRes.data?.users || []);
+      setEvents(eventsRes.data?.events || []);
+      setSubscriptions(subscriptionsRes.data?.subscriptions || []);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load admin data');
     }
@@ -183,6 +189,66 @@ function AdminConsole() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-6">
+          <div className="rounded-xl border border-border bg-card p-4 sm:p-5 overflow-x-auto">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Subscriptions</h3>
+            <table className="w-full min-w-[520px] text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="py-2">User</th>
+                  <th className="py-2">Plan</th>
+                  <th className="py-2">Status</th>
+                  <th className="py-2">Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subscriptions.map((sub) => (
+                  <tr key={`${sub.user_id}-${sub.updated_at || ''}`} className="border-b border-border">
+                    <td className="py-2 text-foreground">{sub.email || sub.user_id}</td>
+                    <td className="py-2 text-muted-foreground">{sub.plan_key || 'free'}</td>
+                    <td className="py-2 text-muted-foreground">{sub.subscription_status || 'inactive'}</td>
+                    <td className="py-2 text-muted-foreground">
+                      {sub.updated_at ? new Date(sub.updated_at).toLocaleString() : '-'}
+                    </td>
+                  </tr>
+                ))}
+                {subscriptions.length === 0 && (
+                  <tr>
+                    <td className="py-3 text-muted-foreground" colSpan={4}>No paid subscriptions yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4 sm:p-5 overflow-x-auto">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Recent Billing Events</h3>
+            <table className="w-full min-w-[420px] text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="py-2">Event Type</th>
+                  <th className="py-2">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((event) => (
+                  <tr key={event.event_id || `${event.event_type}-${event.created_at}`} className="border-b border-border">
+                    <td className="py-2 text-foreground">{event.event_type}</td>
+                    <td className="py-2 text-muted-foreground">
+                      {event.created_at ? new Date(event.created_at).toLocaleString() : '-'}
+                    </td>
+                  </tr>
+                ))}
+                {events.length === 0 && (
+                  <tr>
+                    <td className="py-3 text-muted-foreground" colSpan={2}>No webhook events received yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

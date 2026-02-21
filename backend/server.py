@@ -353,6 +353,28 @@ async def admin_billing_overview(authorization: Optional[str] = Header(None), re
     return await billing_service.admin_billing_overview()
 
 
+@app.get("/api/admin/billing/events")
+async def admin_billing_events(
+    limit: int = Query(default=100, ge=1, le=500),
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    user = await get_current_user(authorization, request)
+    _require_admin(user)
+    return await billing_service.admin_recent_events(limit=limit)
+
+
+@app.get("/api/admin/subscriptions")
+async def admin_subscriptions(
+    limit: int = Query(default=200, ge=1, le=500),
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    user = await get_current_user(authorization, request)
+    _require_admin(user)
+    return await billing_service.admin_subscriptions(limit=limit)
+
+
 @app.get("/api/admin/users")
 async def admin_list_users(
     limit: int = Query(default=50, ge=1, le=200),

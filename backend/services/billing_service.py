@@ -366,3 +366,26 @@ class BillingService:
             "plan_breakdown": plan_breakdown,
             "stripe_test_mode": bool(self._stripe_enabled),
         }
+
+    async def admin_recent_events(self, limit: int = 100) -> Dict[str, Any]:
+        events = await self.db.billing_events.find({}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(length=limit)
+        return {"events": events, "count": len(events)}
+
+    async def admin_subscriptions(self, limit: int = 200) -> Dict[str, Any]:
+        subscriptions = await self.db.billing_profiles.find(
+            {"plan_key": {"$in": ["plus", "pro", "business"]}},
+            {
+                "_id": 0,
+                "user_id": 1,
+                "email": 1,
+                "name": 1,
+                "plan_key": 1,
+                "subscription_status": 1,
+                "stripe_customer_id": 1,
+                "stripe_subscription_id": 1,
+                "current_period_start": 1,
+                "current_period_end": 1,
+                "updated_at": 1,
+            },
+        ).sort("updated_at", -1).limit(limit).to_list(length=limit)
+        return {"subscriptions": subscriptions, "count": len(subscriptions)}
