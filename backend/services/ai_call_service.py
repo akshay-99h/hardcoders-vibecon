@@ -8,12 +8,12 @@ from services.context_service import ContextService
 from datetime import datetime, timezone
 import uuid
 
+# MODULE-LEVEL (GLOBAL) storage - persists across ALL instances and requests
+_GLOBAL_ACTIVE_CALLS: Dict[str, Dict[str, Any]] = {}
+
 
 class AICallService:
     """Service for managing AI voice calls"""
-    
-    # Class-level storage for call sessions (persists across requests)
-    _active_calls: Dict[str, Dict[str, Any]] = {}
     
     def __init__(self):
         self.voice_service = VoiceService()
@@ -24,7 +24,7 @@ class AICallService:
         """Create a new AI call session"""
         call_id = f"call_{uuid.uuid4().hex[:12]}"
         
-        self._active_calls[call_id] = {
+        _GLOBAL_ACTIVE_CALLS[call_id] = {
             "user_id": user_id,
             "conversation_id": conversation_id,
             "language": language,
@@ -33,24 +33,24 @@ class AICallService:
         }
         
         print(f"✅ Created call session: {call_id} for user {user_id}")
-        print(f"📋 Active sessions: {list(self._active_calls.keys())}")
+        print(f"📋 Active sessions: {list(_GLOBAL_ACTIVE_CALLS.keys())}")
         
         return call_id
     
     def get_call_session(self, call_id: str) -> Dict[str, Any]:
         """Get call session info"""
-        session = self._active_calls.get(call_id)
+        session = _GLOBAL_ACTIVE_CALLS.get(call_id)
         if session:
             print(f"✅ Found call session: {call_id}")
         else:
             print(f"❌ Call session not found: {call_id}")
-            print(f"📋 Available sessions: {list(self._active_calls.keys())}")
+            print(f"📋 Available sessions: {list(_GLOBAL_ACTIVE_CALLS.keys())}")
         return session
     
     def end_call_session(self, call_id: str):
         """End call session"""
-        if call_id in self._active_calls:
-            del self._active_calls[call_id]
+        if call_id in _GLOBAL_ACTIVE_CALLS:
+            del _GLOBAL_ACTIVE_CALLS[call_id]
             print(f"✅ Ended call session: {call_id}")
     
     async def process_audio_turn(
