@@ -29,6 +29,7 @@ function ChatInterface() {
   const [isInVoiceMode, setIsInVoiceMode] = useState(false);
   const [voiceCallId, setVoiceCallId] = useState(null);
   const [voiceState, setVoiceState] = useState('idle'); // idle, listening, thinking, speaking
+  const [voiceVolume, setVoiceVolume] = useState(0); // Track mic volume for visual feedback
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
