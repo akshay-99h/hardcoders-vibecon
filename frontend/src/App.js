@@ -5,10 +5,7 @@ import './App.css';
 // Import components
 import LandingPage from './components/LandingPage';
 import AuthCallback from './components/AuthCallback';
-import Dashboard from './components/Dashboard';
-import MissionDetail from './components/MissionDetail';
-import CreateMission from './components/CreateMission';
-import Settings from './components/Settings';
+import ChatInterface from './components/ChatInterface';
 
 function AppRouter() {
   const location = useLocation();
@@ -22,10 +19,7 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/mission/:missionId" element={<MissionDetail />} />
-      <Route path="/create-mission" element={<CreateMission />} />
-      <Route path="/settings" element={<Settings />} />
+      <Route path="/chat" element={<ChatInterface />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
