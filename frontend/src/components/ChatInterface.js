@@ -286,7 +286,7 @@ function ChatInterface() {
             onClick={toggleTheme}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
           >
-            <Icon name={isDark ? "sun-03" : "moon-02"} size={20} />
+            {isDark ? <HiSun size={20} /> : <HiMoon size={20} />}
           </button>
         </header>
 
