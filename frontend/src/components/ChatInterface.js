@@ -351,6 +351,7 @@ function ChatInterface() {
   
   const endVoiceConversation = async () => {
     setIsInVoiceMode(false);
+    isInVoiceModeRef.current = false; // Update ref for callbacks
     setVoiceState('idle');
     
     // Stop recording if active
