@@ -282,6 +282,9 @@ function ChatInterface() {
         const rms = Math.sqrt(sum / bufferLength);
         const volume = rms * 100;
         
+        // Update volume indicator for visual feedback
+        setVoiceVolume(Math.min(100, volume * 3)); // Amplify for visibility
+        
         // Detect speech
         if (volume > SPEECH_THRESHOLD) {
           speechFrames++;
