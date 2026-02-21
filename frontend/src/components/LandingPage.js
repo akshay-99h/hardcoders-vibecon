@@ -127,7 +127,7 @@ function LandingPage() {
         >
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <SecurityCheckIcon size={24} color="white" />
+              <HiShieldCheck className="w-6 h-6 text-white" />
             </div>
             <span className="text-2xl font-bold text-primary">Raksha AI</span>
           </div>
