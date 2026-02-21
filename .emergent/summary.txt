@@ -1,0 +1,213 @@
+<analysis>**original_problem_statement:**
+The user's primary goal is to build RakshaAI, a sophisticated, AI-powered chat assistant focused on Indian government services, legal rights, and civic processes.
+
+The project began with a UI/UX redesign and has since evolved to include advanced features. Key user requests throughout this session have been:
+1.  **Context-Aware AI:** Make the AI use a knowledge base of JSON files (implemented, but with issues).
+2.  **Document Analysis (OCR):** Add a feature for users to upload documents (like legal notices) and get an AI analysis (implemented, but with bugs).
+3.  **Conversational Memory:** Ensure the AI can answer follow-up questions about an uploaded document without requiring a re-upload (attempted fix, needs verification).
+4.  **AI Voice Calls:** Implement a feature where the user can have a continuous, go-and-go voice conversation with the AI (initial version is buggy and does not support continuous conversation).
+5.  **Refined AI Persona:** Provide a very specific, structured system prompt to define the RakshaAI persona and its interaction rules (in progress).
+6.  **UI/UX Polish:** Add features like text-to-speech and copy buttons to chat messages and improve the TTS output.
+7.  **Browser Automation:** A large, detailed feature request for a generic browser automation framework was discussed, estimated, and then de-prioritized by the user in favor of polishing the core AI features.
+
+**PRODUCT REQUIREMENTS:**
+-   **Core Functionality:** A chat and voice interface for an AI assistant knowledgeable in Indian civic matters.
+-   **Authentication:** User login via Emergent-managed Google OAuth.
+-   **AI Capabilities:**
+    -   Must provide accurate, context-grounded answers based on a provided knowledge base.
+    -   Must be able to analyze text from uploaded images and PDFs (OCR).
+    -   Must remember the context of an uploaded document for follow-up questions within the same session.
+    -   Must support a continuous, real-time voice conversation.
+-   **AI Persona:** Adhere strictly to the detailed system prompt defining its role as a safe, structured, and helpful assistant.
+-   **UI/UX:** A clean chat interface with a button to initiate an AI voice call, and per-message controls for TTS and copy.
+
+**User's preferred language**: English
+
+**what currently exists?**
+A full-stack application (React/FastAPI/MongoDB) named RakshaAI.
+-   **Frontend:** A -based UI with a chat interface, Google OAuth login, and localization. It includes a file upload button for OCR, a button to start an AI voice call (which routes to a dedicated  page), and text-to-speech/copy buttons on each chat message.
+-   **Backend:** A FastAPI server with endpoints for chat (), document analysis (), and a buggy AI voice call (). The backend integrates a  to load a JSON knowledge base, uses OpenAI Vision for OCR (with a PDF-to-image conversion fix), and has logic to store uploaded documents. The AI voice call uses OpenAI Whisper for STT and ElevenLabs for TTS. The backend codebase has been refactored to remove obsolete directories.
+
+**Last working item**:
+-   Last item agent was working: The user provided a new, highly detailed system prompt to define the AI's persona and a request to fix the AI voice call to allow continuous conversation. The agent started on the first task by locating the relevant file () to update the system prompt.
+-   Status: IN PROGRESS
+-   Agent Testing Done: N
+-   Which testing method agent to use? backend testing agent (for the prompt update) and both (for the AI call feature fix).
+-   User Testing Done: N
+
+**All Pending/In progress Issue list**:
+-   Issue 1: AI Voice Call is not continuous and ends after one turn (Priority: P0)
+-   Issue 2: AI may forget uploaded document context in follow-up questions (Priority: P1)
+-   Issue 3:  library is not being used per user's design preference (Priority: P2)
+
+**Issues Detail:**
+-   **Issue 1: AI Voice Call is not continuous and ends after one turn**
+    -   **Attempted fixes:** The agent implemented an initial version of the feature, but the user reported, it just starts thinking and the call ends. The agent added more logging for debugging but has not yet fixed the core logic.
+    -   **Next debug checklist:**
+        1.  Review the  function in . The  event likely triggers the end of the call logic prematurely.
+        2.  Refactor the logic to create a loop: . The recorder should restart automatically after the AI finishes speaking.
+        3.  Ensure the WebSocket connection in the backend's  endpoint is kept alive throughout the session and does not close after sending the first audio response.
+        4.  Implement a clear end call signal from the frontend to terminate the loop gracefully.
+    -   **Why fix this issue and what will be achieved with the fix?** This is a critical user request to enable a natural, continuous voice conversation with the AI, moving it beyond a simple request-response model.
+    -   **Status:** IN PROGRESS
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** Both
+    -   **Blocked on other issue:** None
+
+-   **Issue 2: AI may forget uploaded document context in follow-up questions**
+    -   **Attempted fixes:** The agent modified the backend to append the  to the conversation history when a document is analyzed. The chat endpoint was updated to retrieve this context.
+    -   **Next debug checklist:**
+        1.  Create a dedicated backend test case: upload a document, get the analysis, then send a new chat message asking a question about the document's content.
+        2.  Verify in the  endpoint that the  is correctly retrieved from the latest messages and prepended to the prompt for the LLM.
+        3.  Confirm that the context is not being dropped between turns.
+    -   **Why fix this issue and what will be achieved with the fix?** To provide a seamless user experience where the AI demonstrates memory and can hold a contextual conversation about user-provided documents.
+    -   **Status:** TESTING PENDING
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** Backend
+    -   **Blocked on other issue:** None
+
+-   **Issue 3:  library is not being used per user's design preference**
+    -   **Attempted fixes:** The agent previously failed to import  and used  as a workaround.
+    -   **Next debug checklist:**
+        1.  Check  for . If old or missing, run yarn add v1.22.22
+info No lockfile found.
+[1/4] Resolving packages...
+info Visit https://yarnpkg.com/en/docs/cli/add for documentation about this command..
+        2.  Refer to the library's documentation for the correct import syntax.
+        3.  Replace  (e.g., , ) in  and  with their  equivalents.
+    -   **Why fix this issue and what will be achieved with the fix?** To align the application's UI with the user's specific design vision.
+    -   **Status:** NOT STARTED
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Blocked on other issue:** None
+
+**In progress Task List**:
+-   Task 1: Implement the new RakshaAI system prompt (Priority: P0)
+
+**Task Detail:**
+-   **Task 1: Implement the new RakshaAI system prompt**
+    -   **Where to resume:** The agent has identified the file . The next step is to replace the existing system prompt string in the  method of the  class with the new, detailed prompt provided by the user.
+    -   **What will be achieved with this?** The AI's responses will become more structured, safe, and aligned with its designated persona as a trusted assistant for Indian citizens.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Backend
+    -   **Blocked on something:** None
+
+**Upcoming and Future Tasks**
+-   **Upcoming Tasks:**
+    -   **P1: Browser Automation Framework:** The user has shown persistent interest in a generic, adapter-driven browser automation framework. This is a large epic that would require significant design and implementation effort. The initial use case is to track Indian passport application status.
+-   **Future Tasks:**
+    -   **P2: Re-introduce Mission concept:** Evolve the chat into goal-oriented, multi-step conversations.
+    -   **P3: Database Migration:** Migrate from MongoDB to a more scalable relational database like PostgreSQL.
+
+**Completed work in this session**
+-   **Backend Context Integration:** Implemented a  to load the JSON knowledge base for the chat endpoint.
+-   **Frontend Authentication Fix:** Resolved a redirect loop that blocked users from accessing the chat page after login.
+-   **OCR Feature (Document Analysis):**
+    -   Created a backend endpoint () using OpenAI Vision.
+    -   Added a file upload UI to the chat interface.
+    -   Fixed PDF uploads by implementing a PDF-to-image conversion step using .
+-   **Document Storage:** Added backend logic and an endpoint () to store and retrieve uploaded documents.
+-   **Attempted Follow-up Context Fix:** Modified conversation history to include document analysis results.
+-   **UI Enhancements:**
+    -   Added Text-to-Speech and Copy-to-Clipboard buttons to chat messages.
+    -   Improved TTS by filtering emojis and adding emphasis.
+-   **Backend Refactoring:** Cleaned up the backend by removing obsolete directories and organizing services.
+-   **AI Voice Call (v1):** Implemented an initial (but buggy) version of an AI voice call feature.
+
+**Earlier issues found/mentioned but not fixed**
+-   **Issue 1:  library is not used.**
+    -   **Debug checklist:** See All Pending/In progress Issue list.
+    -   **Why to solve this issue and what will be achieved with this?** To fulfill the user's specific UI design request.
+    -   **Should Test frontend/backend/both after fix:** Frontend
+    -   **Is recurring issue?** Y
+
+**Known issue recurrence from previous fork**
+-   **Issue recurrence in previous fork:** The inability to use the  library was noted in the previous handoff.
+-   **Recurrence count:** 2
+-   **Status:** NOT STARTED
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+-   **Frontend:** React, Tailwind CSS, , , MediaRecorder API, Browser  API.
+-   **Backend:** FastAPI, WebSockets, MongoDB (), Pydantic.
+-   **AI/ML:** OpenAI Vision (OCR), OpenAI Whisper (STT), ElevenLabs (TTS), Emergent LLM (Chat).
+-   **Tooling:** , .
+
+**key DB schema**
+-   **users**: 
+-   **conversations**: 
+-   **documents**:  (New)
+
+**changes in tech stack**
+-   **Backend:** , , , .
+-   **Frontend:** .
+
+**All files of reference**
+-   : Contains core API logic, including endpoints for chat, OCR, and the new AI call.
+-   : Contains the system prompt that needs to be updated.
+-   : The UI and logic for the AI voice call feature; needs a major fix.
+-   : The main chat UI; contains logic for file upload, starting calls, and the new TTS/copy buttons.
+-   : Contains the frontend routing, including the new  route.
+
+**Areas that need refactoring**:
+-   The AI Voice Call feature ( and the  endpoint) is buggy and needs to be re-architected to support a continuous conversational loop.
+-   The initial P2P WebRTC code, although mostly removed from the frontend, may have left unused dependencies or backend logic that should be cleaned up.
+
+**key api endpoints**
+-   : Main chat endpoint.
+-   : For OCR document analysis.
+-   : WebSocket endpoint for the AI voice call (buggy).
+-   : To retrieve a user's uploaded document history.
+
+**Critical Info for New Agent**
+-   **Top Priority is the user's latest request:**
+    1.  **Implement the new system prompt:** Replace the old prompt in .
+    2.  **Fix the AI Voice Call:** The user wants a continuous, go-and-go voice conversation. The current implementation is broken and ends after one turn. This is your most critical bug fix.
+-   **Verify the document context fix:** The user previously reported that the AI forgets the context of uploaded documents. A fix was attempted, but you must create a test to verify it works before moving on.
+-   **Do not start the Browser Automation task:** This is a large, de-prioritized epic. Only begin if the user explicitly asks for it again after the current high-priority tasks are complete.
+
+**documents and test reports created in this job**
+-   
+-   
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **User:** Provided a detailed system prompt for the AI persona and requested the AI call feature to be continuous (go and go). **Status: In Progress.**
+2.  **User:** Requested TTS and copy-to-clipboard buttons for each chat message. **Status: Completed.**
+3.  **User:** Provided feedback to improve TTS: remove emojis and add emphasis to words surrounded by exclamation marks. **Status: Completed.**
+4.  **User:** Requested to switch from a P2P audio call to an AI voice assistant call. **Status: Completed (but buggy).**
+5.  **User:** Reported the AI voice call feature is broken (it just starts thinking and the call ends). **Status: Issue acknowledged, fix is pending.**
+6.  **User:** Asked for clarification on what documents the OCR can analyze and if they are stored. **Status: Answered and implemented storage.**
+7.  **User:** Reported that PDF uploads were failing for the OCR feature. **Status: Completed (fixed with PDF-to-image conversion).**
+8.  **User:** Requested a fix for the AI forgetting the context of an uploaded document in follow-up questions. **Status: Attempted fix, needs verification.**
+9.  **User:** Asked to de-prioritize the browser automation framework and focus on other improvements. **Status: Acknowledged.**
+10. **User:** Asked about the implementation cost (in agent tokens) for the browser automation framework. **Status: Answered.**
+
+**Project Health Check:**
+-   **Broken:**
+    -   The core AI Voice Call feature is non-functional for a continuous conversation.
+    -   The user's preferred  library is not implemented.
+-   **Mocked:** N/A
+
+**3rd Party Integrations**
+-   **Emergent-managed Google Auth:** For user login.
+-   **Claude Sonnet (Emergent LLM Key):** Powers the main chat functionality.
+-   **OpenAI GPT-4 Vision (Emergent LLM Key):** Used for the document analysis (OCR) feature.
+-   **OpenAI Whisper:** Used for Speech-to-Text in the AI call feature.
+-   **ElevenLabs:** Used for Text-to-Speech in the AI call feature.
+
+**Testing status**
+-   Testing agent used after significant changes: NO (Recent features like OCR and AI Call were not tested with the testing agent).
+-   Troubleshoot agent used after agent stuck in loop: NO
+-   Test files created: []
+-   Known regressions: The newly implemented AI call feature is not working correctly.
+
+**Credentials to test flow:**
+User authentication is handled by Emergent-managed Google OAuth. The frontend testing agent is required to test flows that need an authenticated user session.
+
+**What agent forgot to execute**
+-   The agent did not thoroughly test the AI Call feature after implementation, leading to the user discovering it was broken.
+-   The agent did not create a verification test for the document context follow-up fix.
+-   The agent has repeatedly overlooked the user's request to implement the  library.
+-   The agent has not yet finished implementing the user's latest request to update the system prompt.</analysis>
