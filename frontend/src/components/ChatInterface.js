@@ -39,10 +39,18 @@ function ChatInterface() {
   useEffect(() => {
     handleAuthCallback();
     
-    // Cleanup speech synthesis on unmount
+    // Cleanup speech synthesis and voice mode on unmount
     return () => {
       if (window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
+      }
+      
+      // Cleanup voice mode if active
+      if (voiceAudioRef.current) {
+        voiceAudioRef.current.pause();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
