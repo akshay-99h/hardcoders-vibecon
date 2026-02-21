@@ -55,7 +55,7 @@ function HowItWorks() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <HiShieldCheck className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-primary">HardCoders</span>
+            <span className="text-xl font-bold text-primary">RakshaAI</span>
           </div>
         </div>
       </div>
@@ -72,7 +72,7 @@ function HowItWorks() {
             How It Works
           </h1>
           <p className="text-lg text-muted-foreground mb-12">
-            Get started with HardCoders in just a few simple steps. Our platform makes it easy to navigate complex legal and financial processes.
+            Get started with RakshaAI in just a few simple steps. Our platform makes it easy to navigate complex legal and financial processes.
           </p>
 
           {/* Feature Cards */}
@@ -240,7 +240,7 @@ function HowItWorks() {
               Ready to Get Started?
             </h3>
             <p className="text-base text-muted-foreground mb-6">
-              Join HardCoders today and simplify your legal and financial journey.
+              Join RakshaAI today and simplify your legal and financial journey.
             </p>
             <Button
               size="lg"
@@ -266,7 +266,7 @@ function HowItWorks() {
               Privacy Policy
             </button>
           </div>
-          <p className="text-sm text-muted-foreground">© 2026 HardCoders</p>
+          <p className="text-sm text-muted-foreground">© 2026 RakshaAI</p>
         </div>
       </div>
     </div>

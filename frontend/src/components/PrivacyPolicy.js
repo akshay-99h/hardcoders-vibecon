@@ -35,7 +35,7 @@ function PrivacyPolicy() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <HiShieldCheck className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-primary">HardCoders</span>
+            <span className="text-xl font-bold text-primary">RakshaAI</span>
           </div>
         </div>
       </div>
@@ -58,7 +58,7 @@ function PrivacyPolicy() {
           <div className="mb-12">
             <h2 className="text-2xl font-bold text-foreground mb-4">Introduction</h2>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              HardCoders ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our legal and financial guidance platform.
+              RakshaAI ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our legal and financial guidance platform.
             </p>
             <p className="text-base text-muted-foreground leading-relaxed">
               Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the site or use our services.
@@ -178,7 +178,7 @@ function PrivacyPolicy() {
               If you have any questions about this Privacy Policy or our data practices, please contact us at:
             </p>
             <div className="mt-4 p-4 bg-card border border-border rounded-lg">
-              <p className="text-base text-foreground font-medium">HardCoders</p>
+              <p className="text-base text-foreground font-medium">RakshaAI</p>
               <p className="text-base text-muted-foreground">Email: privacy@hardcoders.com</p>
             </div>
           </div>
@@ -196,7 +196,7 @@ function PrivacyPolicy() {
               Privacy Policy
             </button>
           </div>
-          <p className="text-sm text-muted-foreground">© 2026 HardCoders</p>
+          <p className="text-sm text-muted-foreground">© 2026 RakshaAI</p>
         </div>
       </div>
     </div>

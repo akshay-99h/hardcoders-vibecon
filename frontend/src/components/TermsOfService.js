@@ -35,7 +35,7 @@ function TermsOfService() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <HiShieldCheck className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-primary">HardCoders</span>
+            <span className="text-xl font-bold text-primary">RakshaAI</span>
           </div>
         </div>
       </div>
@@ -58,7 +58,7 @@ function TermsOfService() {
           <div className="mb-12">
             <h2 className="text-2xl font-bold text-foreground mb-4">Agreement to Terms</h2>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              These Terms of Service ("Terms") govern your access to and use of HardCoders' services, including our website, applications, and any related services (collectively, the "Services").
+              These Terms of Service ("Terms") govern your access to and use of RakshaAI' services, including our website, applications, and any related services (collectively, the "Services").
             </p>
             <p className="text-base text-muted-foreground leading-relaxed">
               By accessing or using our Services, you agree to be bound by these Terms. If you do not agree to these Terms, do not use our Services.
@@ -110,12 +110,12 @@ function TermsOfService() {
             
             <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">Your Content</h3>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              You retain ownership of any content you submit to the Services ("Your Content"). By submitting Your Content, you grant HardCoders a worldwide, non-exclusive, royalty-free license to use, reproduce, and display Your Content solely to provide and improve the Services.
+              You retain ownership of any content you submit to the Services ("Your Content"). By submitting Your Content, you grant RakshaAI a worldwide, non-exclusive, royalty-free license to use, reproduce, and display Your Content solely to provide and improve the Services.
             </p>
 
             <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">Our Content</h3>
             <p className="text-base text-muted-foreground leading-relaxed">
-              All content provided by HardCoders, including text, graphics, logos, and software, is owned by HardCoders or its licensors and is protected by intellectual property laws. You may not use our content without our prior written permission.
+              All content provided by RakshaAI, including text, graphics, logos, and software, is owned by RakshaAI or its licensors and is protected by intellectual property laws. You may not use our content without our prior written permission.
             </p>
           </div>
 
@@ -137,7 +137,7 @@ function TermsOfService() {
           <div className="mb-12">
             <h2 className="text-2xl font-bold text-foreground mb-4">Not Legal or Financial Advice</h2>
             <p className="text-base text-muted-foreground leading-relaxed">
-              The information and guidance provided through our Services are for informational purposes only and do not constitute legal, financial, or professional advice. You should consult with qualified professionals for advice specific to your situation. HardCoders is not responsible for any actions you take based on information from our Services.
+              The information and guidance provided through our Services are for informational purposes only and do not constitute legal, financial, or professional advice. You should consult with qualified professionals for advice specific to your situation. RakshaAI is not responsible for any actions you take based on information from our Services.
             </p>
           </div>
 
@@ -153,7 +153,7 @@ function TermsOfService() {
           <div className="mb-12">
             <h2 className="text-2xl font-bold text-foreground mb-4">Indemnification</h2>
             <p className="text-base text-muted-foreground leading-relaxed">
-              You agree to indemnify, defend, and hold harmless HardCoders and its officers, directors, employees, and agents from any claims, liabilities, damages, losses, and expenses arising out of or related to your use of the Services or violation of these Terms.
+              You agree to indemnify, defend, and hold harmless RakshaAI and its officers, directors, employees, and agents from any claims, liabilities, damages, losses, and expenses arising out of or related to your use of the Services or violation of these Terms.
             </p>
           </div>
 
@@ -169,7 +169,7 @@ function TermsOfService() {
           <div className="mb-12">
             <h2 className="text-2xl font-bold text-foreground mb-4">Governing Law</h2>
             <p className="text-base text-muted-foreground leading-relaxed">
-              These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which HardCoders operates, without regard to its conflict of law provisions.
+              These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which RakshaAI operates, without regard to its conflict of law provisions.
             </p>
           </div>
 
@@ -188,7 +188,7 @@ function TermsOfService() {
               If you have any questions about these Terms, please contact us:
             </p>
             <div className="mt-4 p-4 bg-card border border-border rounded-lg">
-              <p className="text-base text-foreground font-medium">HardCoders</p>
+              <p className="text-base text-foreground font-medium">RakshaAI</p>
               <p className="text-base text-muted-foreground">Email: legal@hardcoders.com</p>
             </div>
           </div>
@@ -206,7 +206,7 @@ function TermsOfService() {
               Privacy Policy
             </button>
           </div>
-          <p className="text-sm text-muted-foreground">© 2026 HardCoders</p>
+          <p className="text-sm text-muted-foreground">© 2026 RakshaAI</p>
         </div>
       </div>
     </div>
