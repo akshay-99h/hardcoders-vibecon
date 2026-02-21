@@ -1,0 +1,83 @@
+{
+  "category": "document_templates",
+  "description": "Templates for citizen-to-government documents that Raksha AI can generate",
+  "keywords": ["complaint", "RTI", "grievance", "email", "letter", "draft", "application", "write", "generate", "document", "likhna", "shikayat", "avedan", "patra"],
+  "can_generate": ["complaint_letter", "rti_application", "grievance_text", "email_draft", "first_appeal_rti"],
+  "cannot_generate": {
+    "types": ["affidavit", "power_of_attorney", "sale_deed", "rent_agreement", "court_petition", "writ_petition", "plaint", "FIR_text", "legal_notice_final"],
+    "reason": "Requires stamp paper, notarization, court filing, or advocate signature",
+    "redirect": "Contact a licensed advocate. Free legal aid: NALSA helpline 15100 or visit https://nalsa.gov.in"
+  },
+  "templates": {
+    "complaint_letter": {
+      "description": "Formal complaint to a government department or authority",
+      "required_fields": [
+        {"field": "user_name", "ask": "What is your full name?"},
+        {"field": "user_address", "ask": "What is your address?"},
+        {"field": "user_phone", "ask": "What is your phone number?"},
+        {"field": "user_email", "ask": "What is your email? (optional)"},
+        {"field": "authority_name", "ask": "Which officer/department are you complaining to?"},
+        {"field": "authority_address", "ask": "What is the office address? (if known)"},
+        {"field": "application_number", "ask": "Do you have an application or reference number?"},
+        {"field": "filed_date", "ask": "When did you originally file/apply?"},
+        {"field": "issue_description", "ask": "What is the problem? (delay, rejection, non-response, etc.)"},
+        {"field": "previous_attempts", "ask": "Have you already complained or followed up? If yes, when and how?"},
+        {"field": "relief_sought", "ask": "What do you want them to do? (process application, refund, etc.)"}
+      ],
+      "format": "To,\n[AUTHORITY_NAME]\n[AUTHORITY_ADDRESS]\n\nDate: [DATE]\n\nSubject: [SUBJECT WITH REFERENCE NUMBERS]\n\nRespected Sir/Madam,\n\n[PARA 1: Introduction — who I am, what I applied for, when, reference number]\n[PARA 2: The problem — what went wrong, SLA breach if applicable]\n[PARA 3: Previous attempts — complaints, visits, calls made]\n[PARA 4: Relief sought — what I want, with timeline]\n\nI request you to kindly look into this matter and take appropriate action within [15/30] days, failing which I shall be compelled to approach higher authorities / file an RTI application / approach the consumer forum.\n\nThanking you,\n[USER_NAME]\n[USER_ADDRESS]\n[USER_PHONE]\n[USER_EMAIL]\n\nEnclosures:\n1. Copy of application/receipt\n2. Previous correspondence (if any)\n3. Supporting documents"
+    },
+    "rti_application": {
+      "description": "Application under Right to Information Act, 2005",
+      "required_fields": [
+        {"field": "user_name", "ask": "What is your full name?"},
+        {"field": "user_address", "ask": "What is your address?"},
+        {"field": "user_phone", "ask": "What is your phone number?"},
+        {"field": "user_email", "ask": "What is your email?"},
+        {"field": "department", "ask": "Which department/office do you want information from?"},
+        {"field": "department_address", "ask": "What is the department address? (if known)"},
+        {"field": "application_number", "ask": "Do you have a reference/application number related to this?"},
+        {"field": "information_needed", "ask": "What specific information do you want? (file status, officer name, reason for delay, copies of documents, etc.)"},
+        {"field": "payment_mode", "ask": "How will you pay the Rs. 10 fee? (Indian Postal Order / Demand Draft / Online at rtionline.gov.in)"},
+        {"field": "preferred_format", "ask": "How do you want the information? (hard copy by post / email)"}
+      ],
+      "format": "To,\nThe Central/State Public Information Officer\n[DEPARTMENT]\n[DEPARTMENT_ADDRESS]\n\nSubject: Application under Right to Information Act, 2005\n\nSir/Madam,\n\nI, [USER_NAME], resident of [USER_ADDRESS], hereby request the following information under the Right to Information Act, 2005:\n\n1. [QUESTION 1]\n2. [QUESTION 2]\n3. [QUESTION 3]\n4. [QUESTION 4]\n\nI am depositing the prescribed fee of Rs. 10/- via [PAYMENT_MODE].\n\nPlease provide the information in [PREFERRED_FORMAT].\n\nYours faithfully,\n[USER_NAME]\n[USER_ADDRESS]\n[USER_PHONE]\n[USER_EMAIL]\n\nDate: [DATE]"
+    },
+    "first_appeal_rti": {
+      "description": "First Appeal when RTI response not received within 30 days",
+      "required_fields": [
+        {"field": "user_name", "ask": "What is your full name?"},
+        {"field": "user_address", "ask": "What is your address?"},
+        {"field": "original_rti_date", "ask": "When did you file the original RTI?"},
+        {"field": "original_rti_reference", "ask": "What is the RTI application reference number?"},
+        {"field": "department", "ask": "Which department was the RTI filed with?"},
+        {"field": "first_appellate_authority", "ask": "Name of First Appellate Authority (senior officer of the department — if unknown, I'll use the designation)"},
+        {"field": "information_requested", "ask": "What information did you originally request?"}
+      ],
+      "format": "To,\nThe First Appellate Authority\n[FIRST_APPELLATE_AUTHORITY]\n[DEPARTMENT]\n\nSubject: First Appeal under Section 19(1) of the Right to Information Act, 2005\n\nSir/Madam,\n\nI, [USER_NAME], had filed an RTI application dated [ORIGINAL_RTI_DATE] (Reference: [ORIGINAL_RTI_REFERENCE]) with the PIO of [DEPARTMENT], requesting the following information:\n\n[INFORMATION_REQUESTED]\n\nThe prescribed period of 30 days has elapsed and I have not received any response / I have received an incomplete response.\n\nI hereby file this First Appeal under Section 19(1) of the RTI Act, 2005, and request that the information be provided at the earliest.\n\nYours faithfully,\n[USER_NAME]\n[USER_ADDRESS]\n[USER_PHONE]\n[USER_EMAIL]\n\nDate: [DATE]\n\nEnclosure: Copy of original RTI application and proof of filing"
+    },
+    "grievance_text": {
+      "description": "Short text for pasting into online portals (CPGRAMS, consumer forum, EPFO, etc.)",
+      "required_fields": [
+        {"field": "user_name", "ask": "What is your full name?"},
+        {"field": "application_number", "ask": "Reference/application number?"},
+        {"field": "department", "ask": "Which department?"},
+        {"field": "filed_date", "ask": "When did you file?"},
+        {"field": "issue_description", "ask": "Describe the problem briefly"},
+        {"field": "relief_sought", "ask": "What action do you want?"}
+      ],
+      "format": "Grievance regarding [APPLICATION_NUMBER] filed on [FILED_DATE] with [DEPARTMENT].\n\n[ISSUE_DESCRIPTION]\n\nDespite the prescribed timeline, no action has been taken. Previous follow-ups on [DATES] have not yielded results.\n\nRequested action: [RELIEF_SOUGHT]\n\nApplicant: [USER_NAME]\nContact: [USER_PHONE]"
+    },
+    "email_draft": {
+      "description": "Professional email to bank, insurance, employer, or nodal officer",
+      "required_fields": [
+        {"field": "user_name", "ask": "What is your full name?"},
+        {"field": "recipient", "ask": "Who are you emailing? (bank manager, nodal officer, insurance company, etc.)"},
+        {"field": "account_or_policy_number", "ask": "Account/policy/reference number?"},
+        {"field": "issue_description", "ask": "What is the problem?"},
+        {"field": "relief_sought", "ask": "What do you want them to do?"},
+        {"field": "previous_attempts", "ask": "Have you already contacted them? When?"}
+      ],
+      "format": "Subject: [CLEAR SUBJECT WITH REFERENCE NUMBER]\n\nDear [RECIPIENT],\n\n[PARA 1: Account/policy details and the issue]\n[PARA 2: Timeline of events and previous attempts]\n[PARA 3: Specific action requested with deadline]\n[PARA 4: Mention regulatory escalation if no response — RBI Ombudsman / IRDAI / Consumer Forum]\n\nPlease resolve this within [7/15] days, failing which I will be compelled to escalate to [REGULATORY BODY].\n\nRegards,\n[USER_NAME]\n[USER_PHONE]\n[USER_EMAIL]"
+    }
+  }
+}
