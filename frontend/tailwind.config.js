@@ -51,7 +51,49 @@ module.exports = {
         serif: ['Lora', 'serif'],
         mono: ['IBM Plex Mono', 'monospace'],
       },
+      typography: (theme) => ({
+        DEFAULT: {
+          css: {
+            color: theme('colors.foreground'),
+            maxWidth: 'none',
+            a: {
+              color: theme('colors.primary.DEFAULT'),
+              '&:hover': {
+                opacity: 0.8,
+              },
+            },
+            strong: {
+              color: theme('colors.foreground'),
+            },
+            code: {
+              color: theme('colors.foreground'),
+              backgroundColor: theme('colors.muted.DEFAULT'),
+              padding: '0.25rem 0.5rem',
+              borderRadius: '0.25rem',
+              fontWeight: '500',
+            },
+            'code::before': {
+              content: '""',
+            },
+            'code::after': {
+              content: '""',
+            },
+            pre: {
+              backgroundColor: theme('colors.muted.DEFAULT'),
+              color: theme('colors.foreground'),
+            },
+            ul: {
+              listStyleType: 'disc',
+            },
+            ol: {
+              listStyleType: 'decimal',
+            },
+          },
+        },
+      }),
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 };
