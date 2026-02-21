@@ -433,8 +433,27 @@ async def analyze_document(
         raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
     
     try:
-        # Convert to base64
-        image_base64 = base64.b64encode(file_content).decode('utf-8')
+        # Handle PDF files differently - convert to image
+        if file.content_type == "application/pdf":
+            from pdf2image import convert_from_bytes
+            from PIL import Image
+            import io
+            
+            # Convert PDF to images (first page only)
+            images = convert_from_bytes(file_content, first_page=1, last_page=1)
+            
+            if not images:
+                raise HTTPException(status_code=400, detail="Could not extract image from PDF")
+            
+            # Convert PIL Image to base64
+            img = images[0]
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0)
+            image_base64 = base64.b64encode(img_byte_arr.read()).decode('utf-8')
+        else:
+            # For image files, directly convert to base64
+            image_base64 = base64.b64encode(file_content).decode('utf-8')
         
         # Analyze the document
         result = await vision_service.analyze_legal_document(
@@ -455,7 +474,9 @@ async def analyze_document(
         raise
     except Exception as e:
         print(f"Document analysis error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to analyze document")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to analyze document: {str(e)}")
 
 @app.post("/api/documents/ocr")
 async def extract_text_from_document(
