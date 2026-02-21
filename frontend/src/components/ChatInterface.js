@@ -240,6 +240,60 @@ function ChatInterface() {
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       
+      // Voice Activity Detection (VAD) - Detect silence
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioStreamSource = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.minDecibels = -90;
+      analyser.maxDecibels = -10;
+      analyser.smoothingTimeConstant = 0.85;
+      
+      audioStreamSource.connect(analyser);
+      
+      const bufferLength = analyser.frequencyBinCount;
+      const domainData = new Uint8Array(bufferLength);
+      
+      let silenceStart = performance.now();
+      let triggered = false; // Track if user has started speaking
+      const silenceDelay = 1500; // 1.5 seconds of silence triggers auto-send
+      const minSpeechDuration = 500; // Minimum 0.5 seconds of speech before considering silence
+      
+      const detectSound = () => {
+        if (!isInVoiceModeRef.current || !mediaRecorder || mediaRecorder.state !== 'recording') {
+          return;
+        }
+        
+        analyser.getByteFrequencyData(domainData);
+        
+        // Calculate average volume
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += domainData[i];
+        }
+        const average = sum / bufferLength;
+        
+        // Detect speech (volume above threshold)
+        if (average > 15) { // Threshold for detecting speech
+          if (!triggered) {
+            triggered = true; // User started speaking
+          }
+          silenceStart = performance.now(); // Reset silence timer
+        } else if (triggered) {
+          // User has spoken before, now check for silence
+          const silenceDuration = performance.now() - silenceStart;
+          
+          if (silenceDuration > silenceDelay) {
+            // User stopped speaking for 1.5 seconds - auto send
+            console.log('Silence detected - auto-sending audio');
+            stopVoiceListening();
+            return;
+          }
+        }
+        
+        // Continue monitoring
+        requestAnimationFrame(detectSound);
+      };
+      
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
@@ -247,14 +301,20 @@ function ChatInterface() {
       };
       
       mediaRecorder.onstop = async () => {
+        // Cleanup audio context
+        if (audioContext.state !== 'closed') {
+          audioContext.close();
+        }
+        
         if (!isInVoiceModeRef.current) return; // Exit if voice mode was ended
         
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         
-        if (audioBlob.size > 0) {
+        if (audioBlob.size > 100) { // Only process if there's actual audio
           await processVoiceTurn(audioBlob);
         } else {
-          // Empty audio, restart listening
+          // Empty or very small audio, restart listening
+          console.log('No speech detected, restarting...');
           setVoiceState('listening');
           await startVoiceListening();
         }
@@ -263,12 +323,16 @@ function ChatInterface() {
       mediaRecorder.start();
       setVoiceState('listening');
       
-      // Auto-stop after 10 seconds (user can also tap to send earlier)
+      // Start VAD monitoring
+      requestAnimationFrame(detectSound);
+      
+      // Safety timeout - maximum 30 seconds per turn
       setTimeout(() => {
         if (mediaRecorder.state === 'recording' && isInVoiceModeRef.current) {
+          console.log('Maximum recording time reached - auto-sending');
           stopVoiceListening();
         }
-      }, 10000);
+      }, 30000);
       
     } catch (error) {
       console.error('Failed to start voice listening:', error);
