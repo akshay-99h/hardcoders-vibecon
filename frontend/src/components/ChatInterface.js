@@ -539,20 +539,50 @@ function ChatInterface() {
                 key={index}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
               >
-                <div
-                  className={`max-w-[85%] rounded-[1.4rem] px-5 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-card text-card-foreground border border-border'
-                  }`}
-                >
-                  {message.role === 'user' ? (
-                    <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
-                  ) : (
-                    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-card-foreground prose-strong:text-foreground prose-ul:text-card-foreground prose-ol:text-card-foreground prose-li:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-foreground">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {message.content}
-                      </ReactMarkdown>
+                <div className="flex flex-col gap-2 max-w-[85%]">
+                  <div
+                    className={`rounded-[1.4rem] px-5 py-3 ${
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-card text-card-foreground border border-border'
+                    }`}
+                  >
+                    {message.role === 'user' ? (
+                      <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                    ) : (
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-card-foreground prose-strong:text-foreground prose-ul:text-card-foreground prose-ol:text-card-foreground prose-li:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Action buttons for assistant messages */}
+                  {message.role === 'assistant' && (
+                    <div className="flex items-center gap-2 px-2">
+                      <button
+                        onClick={() => handleTextToSpeech(message)}
+                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                        title={speakingMessageId === message.timestamp ? "Stop speaking" : "Read aloud"}
+                      >
+                        <HiVolumeUp 
+                          size={16} 
+                          className={speakingMessageId === message.timestamp ? 'text-primary animate-pulse' : ''}
+                        />
+                      </button>
+                      
+                      <button
+                        onClick={() => handleCopyToClipboard(message)}
+                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                        title={copiedMessageId === message.timestamp ? "Copied!" : "Copy to clipboard"}
+                      >
+                        {copiedMessageId === message.timestamp ? (
+                          <HiCheck size={16} className="text-green-500" />
+                        ) : (
+                          <HiClipboardCopy size={16} />
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
