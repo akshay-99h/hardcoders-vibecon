@@ -187,7 +187,10 @@ async def create_session(request: Request):
     # Return response with cookie
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     
-    response = JSONResponse(content=user_doc)
+    # Serialize datetime objects for JSON response
+    user_data = serialize_doc(user_doc)
+    
+    response = JSONResponse(content=user_data)
     response.set_cookie(
         key="session_token",
         value=session_token,
