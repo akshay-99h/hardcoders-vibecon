@@ -28,6 +28,15 @@ def _to_int(value: Any, default: int) -> int:
         return default
 
 
+def _ts_to_dt(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    try:
+        return datetime.fromtimestamp(int(value), tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
+
+
 class BillingService:
     def __init__(self, db):
         self.db = db
@@ -395,16 +404,227 @@ class BillingService:
         if not price_id:
             raise ValueError(f"Missing Stripe price id for plan '{plan_key}'")
 
+        success_url = self._checkout_success_url()
+
         checkout = stripe.checkout.Session.create(
             mode="subscription",
             customer=profile.get("stripe_customer_id"),
             line_items=[{"price": price_id, "quantity": 1}],
-            success_url=settings.STRIPE_CHECKOUT_SUCCESS_URL,
+            success_url=success_url,
             cancel_url=settings.STRIPE_CHECKOUT_CANCEL_URL,
             metadata={"user_id": user["user_id"], "plan_key": plan_key},
             allow_promotion_codes=True,
         )
-        return {"id": checkout["id"], "url": checkout["url"]}
+        await self._upsert_subscription_shadow(
+            checkout["id"],
+            {
+                "user_id": user["user_id"],
+                "email": user.get("email"),
+                "requested_plan_key": plan_key,
+                "resolved_plan_key": plan_key,
+                "stripe_customer_id": checkout.get("customer"),
+                "checkout_status": checkout.get("status", "open"),
+                "payment_status": checkout.get("payment_status", "unpaid"),
+                "purchase_status": "pending",
+                "is_final": False,
+                "stripe_subscription_id": None,
+                "subscription_status": "pending",
+                "current_period_start": None,
+                "current_period_end": None,
+                "amount_total": checkout.get("amount_total"),
+                "currency": checkout.get("currency"),
+                "livemode": checkout.get("livemode", False),
+                "source": "checkout_create",
+            },
+        )
+        return {
+            "id": checkout["id"],
+            "url": checkout["url"],
+            "success_url_uses_session_id": "{CHECKOUT_SESSION_ID}" in success_url,
+        }
+
+    def _checkout_success_url(self) -> str:
+        success_url = settings.STRIPE_CHECKOUT_SUCCESS_URL
+        if "{CHECKOUT_SESSION_ID}" in success_url:
+            return success_url
+        separator = "&" if "?" in success_url else "?"
+        return f"{success_url}{separator}session_id={{CHECKOUT_SESSION_ID}}"
+
+    def _derive_purchase_status(
+        self,
+        checkout_status: Optional[str],
+        payment_status: Optional[str],
+        subscription_status: Optional[str],
+    ) -> str:
+        status = (checkout_status or "").lower()
+        payment = (payment_status or "").lower()
+        subscription = (subscription_status or "").lower()
+
+        if status == "open":
+            return "pending"
+        if status == "expired":
+            return "expired"
+        if status != "complete":
+            return "pending"
+
+        if payment not in {"paid", "no_payment_required"}:
+            return "failed"
+        if subscription in {"incomplete", "incomplete_expired"}:
+            return "pending"
+        if subscription in {"canceled", "unpaid"}:
+            return "failed"
+        return "succeeded"
+
+    async def _upsert_subscription_shadow(
+        self,
+        checkout_session_id: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        now = _utc_now()
+        doc = await self.db.subscription_shadow.find_one_and_update(
+            {"checkout_session_id": checkout_session_id},
+            {
+                "$setOnInsert": {
+                    "checkout_session_id": checkout_session_id,
+                    "created_at": now,
+                },
+                "$set": {
+                    **payload,
+                    "updated_at": now,
+                },
+            },
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+        if doc:
+            doc.pop("_id", None)
+            return doc
+        return {"checkout_session_id": checkout_session_id, **payload, "updated_at": now}
+
+    async def sync_checkout_payment_status(self, user: Dict[str, Any], checkout_session_id: str) -> Dict[str, Any]:
+        if not self._stripe_enabled:
+            raise RuntimeError("Stripe is not configured. Set STRIPE_SECRET_KEY for test mode.")
+        if not checkout_session_id:
+            raise ValueError("checkout_session_id required")
+
+        profile = await self.ensure_customer(user)
+        session = stripe.checkout.Session.retrieve(
+            checkout_session_id,
+            expand=["subscription", "line_items.data.price"],
+        )
+
+        metadata = session.get("metadata", {}) or {}
+        expected_user_id = metadata.get("user_id")
+        if expected_user_id and expected_user_id != user["user_id"]:
+            raise ValueError("Checkout session does not belong to current user")
+
+        customer_id = session.get("customer")
+        profile_customer_id = profile.get("stripe_customer_id")
+        if customer_id and profile_customer_id and customer_id != profile_customer_id:
+            raise ValueError("Checkout session does not belong to current user")
+
+        requested_plan_key = metadata.get("plan_key")
+        checkout_status = session.get("status", "open")
+        payment_status = session.get("payment_status", "unpaid")
+
+        subscription_obj = session.get("subscription")
+        if isinstance(subscription_obj, str) and subscription_obj:
+            subscription_obj = stripe.Subscription.retrieve(subscription_obj, expand=["items.data.price"])
+
+        subscription_id = None
+        subscription_status = None
+        current_period_start = None
+        current_period_end = None
+        price_id = None
+
+        if isinstance(subscription_obj, dict):
+            subscription_id = subscription_obj.get("id")
+            subscription_status = subscription_obj.get("status")
+            current_period_start = _ts_to_dt(subscription_obj.get("current_period_start"))
+            current_period_end = _ts_to_dt(subscription_obj.get("current_period_end"))
+            sub_items = subscription_obj.get("items", {}).get("data", [])
+            if sub_items:
+                price_id = sub_items[0].get("price", {}).get("id")
+
+        if not price_id:
+            line_items = session.get("line_items", {}).get("data", [])
+            if line_items:
+                price_id = line_items[0].get("price", {}).get("id")
+
+        resolved_plan_key = self._plan_for_price_id(price_id)
+        if resolved_plan_key == "free" and requested_plan_key in {"plus", "pro", "business"}:
+            resolved_plan_key = requested_plan_key
+
+        purchase_status = self._derive_purchase_status(
+            checkout_status=checkout_status,
+            payment_status=payment_status,
+            subscription_status=subscription_status,
+        )
+        is_final = purchase_status in {"succeeded", "failed", "expired"}
+
+        await self.db.billing_profiles.update_one(
+            {"user_id": user["user_id"]},
+            {
+                "$set": {
+                    "last_checkout_session_id": checkout_session_id,
+                    "last_checkout_status": checkout_status,
+                    "last_payment_status": payment_status,
+                    "last_purchase_status": purchase_status,
+                    "updated_at": _utc_now(),
+                }
+            },
+        )
+
+        profile_updated = False
+        if purchase_status == "succeeded" and resolved_plan_key in {"plus", "pro", "business"}:
+            await self.sync_profile_plan_for_user(
+                user_id=user["user_id"],
+                plan_key=resolved_plan_key,
+                subscription_status=subscription_status or "active",
+                stripe_subscription_id=subscription_id,
+                current_period_start=current_period_start,
+                current_period_end=current_period_end,
+            )
+            profile_updated = True
+
+        shadow = await self._upsert_subscription_shadow(
+            checkout_session_id,
+            {
+                "user_id": user["user_id"],
+                "email": user.get("email"),
+                "requested_plan_key": requested_plan_key,
+                "resolved_plan_key": resolved_plan_key,
+                "stripe_customer_id": customer_id,
+                "checkout_status": checkout_status,
+                "payment_status": payment_status,
+                "purchase_status": purchase_status,
+                "is_final": is_final,
+                "stripe_subscription_id": subscription_id,
+                "subscription_status": subscription_status,
+                "current_period_start": current_period_start,
+                "current_period_end": current_period_end,
+                "amount_total": session.get("amount_total"),
+                "currency": session.get("currency"),
+                "livemode": session.get("livemode", False),
+                "source": "payment_status_api",
+            },
+        )
+
+        return {
+            "checkout_session_id": checkout_session_id,
+            "checkout_status": checkout_status,
+            "payment_status": payment_status,
+            "purchase_status": purchase_status,
+            "is_final": is_final,
+            "requested_plan_key": requested_plan_key,
+            "resolved_plan_key": resolved_plan_key,
+            "stripe_subscription_id": subscription_id,
+            "subscription_status": subscription_status,
+            "current_period_start": current_period_start,
+            "current_period_end": current_period_end,
+            "profile_updated": profile_updated,
+            "shadow": shadow,
+        }
 
     async def create_billing_portal_session(self, user: Dict[str, Any]) -> Dict[str, Any]:
         if not self._stripe_enabled:

@@ -327,6 +327,27 @@ async def create_checkout_session(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@app.get("/api/billing/payment-status")
+async def get_checkout_payment_status(
+    session_id: str = Query(..., min_length=5),
+    authorization: Optional[str] = Header(None),
+    request: Request = None,
+):
+    """Poll Stripe Checkout Session status and sync local shadow subscription state."""
+    user = await get_current_user(authorization, request)
+    try:
+        return await billing_service.sync_checkout_payment_status(
+            user=user,
+            checkout_session_id=session_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @app.post("/api/billing/customer-portal")
 async def create_customer_portal_session(
     authorization: Optional[str] = Header(None),

@@ -25,7 +25,10 @@ class Settings:
     STRIPE_PRICE_PLUS_MONTHLY = os.getenv("STRIPE_PRICE_PLUS_MONTHLY", "")
     STRIPE_PRICE_PRO_MONTHLY = os.getenv("STRIPE_PRICE_PRO_MONTHLY", "")
     STRIPE_PRICE_BUSINESS_MONTHLY = os.getenv("STRIPE_PRICE_BUSINESS_MONTHLY", "")
-    STRIPE_CHECKOUT_SUCCESS_URL = os.getenv("STRIPE_CHECKOUT_SUCCESS_URL", "http://localhost:3000/billing?checkout=success")
+    STRIPE_CHECKOUT_SUCCESS_URL = os.getenv(
+        "STRIPE_CHECKOUT_SUCCESS_URL",
+        "http://localhost:3000/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}",
+    )
     STRIPE_CHECKOUT_CANCEL_URL = os.getenv("STRIPE_CHECKOUT_CANCEL_URL", "http://localhost:3000/billing?checkout=cancel")
     STRIPE_BILLING_RETURN_URL = os.getenv("STRIPE_BILLING_RETURN_URL", "http://localhost:3000/billing")
     
