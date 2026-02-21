@@ -159,7 +159,7 @@ function LandingPage() {
               className="group"
             >
               <span>Get Started</span>
-              <ArrowRight01Icon size={18} className="group-hover:translate-x-1 transition-transform" />
+              <HiArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Button>
 
             <Button
