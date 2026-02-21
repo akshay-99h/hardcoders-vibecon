@@ -138,11 +138,13 @@ function Dashboard() {
         <div className="mb-8">
           <button
             onClick={() => navigate('/create-mission')}
-            className="btn-primary w-full sm:w-auto px-8 py-4 text-white rounded-lg font-semibold text-lg shadow-lg"
+            className="btn-primary w-full sm:w-auto px-8 py-4 text-white rounded-xl font-semibold text-lg shadow-lg flex items-center justify-center gap-3 hover:shadow-xl transition-all"
             data-testid="create-mission-btn"
           >
-            + Start New Mission
+            <span className="text-2xl">💬</span>
+            <span>Start Chat with Mission Guide</span>
           </button>
+          <p className="text-sm text-gray-600 mt-2">Chat with AI to create your personalized mission</p>
         </div>
 
         {/* Mission Domains Quick Access */}
