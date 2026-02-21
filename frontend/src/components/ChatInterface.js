@@ -343,7 +343,7 @@ function ChatInterface() {
               className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
               title="Attach file"
             >
-              <Icon name="attachment-01" size={20} />
+              <HiPaperClip size={20} />
             </button>
 
             <button
@@ -354,7 +354,7 @@ function ChatInterface() {
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
-              <Icon name="mic-01" size={20} />
+              <HiMicrophone size={20} />
             </button>
 
             <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
