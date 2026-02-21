@@ -8,9 +8,28 @@ import os
 import uuid
 import aiofiles
 from dotenv import load_dotenv
+import json
 
 # Load environment variables
 load_dotenv()
+
+# Helper function to serialize datetime objects
+def serialize_doc(doc):
+    """Convert MongoDB document to JSON-serializable dict"""
+    if doc is None:
+        return None
+    
+    serialized = {}
+    for key, value in doc.items():
+        if isinstance(value, datetime):
+            serialized[key] = value.isoformat()
+        elif isinstance(value, list):
+            serialized[key] = [serialize_doc(item) if isinstance(item, dict) else item for item in value]
+        elif isinstance(value, dict):
+            serialized[key] = serialize_doc(value)
+        else:
+            serialized[key] = value
+    return serialized
 
 # Import services and agents
 from config.settings import settings
