@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Header, Response, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
@@ -20,6 +20,7 @@ from services.voice_service import VoiceService
 from services.context_service import ContextService
 from services.vision_service import VisionService
 from services.ai_call_service import ai_call_service
+from services.pdf_generator import PDFGeneratorService
 
 # Helper function to serialize datetime objects
 def serialize_doc(doc):
