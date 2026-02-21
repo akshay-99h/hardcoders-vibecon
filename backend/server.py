@@ -413,6 +413,7 @@ async def synthesize_speech(request: Request, authorization: Optional[str] = Hea
 async def analyze_document(
     file: UploadFile = File(...),
     query: Optional[str] = None,
+    store_document: bool = False,
     authorization: Optional[str] = Header(None),
     request: Request = None
 ):
@@ -464,10 +465,28 @@ async def analyze_document(
         if not result.get("success"):
             raise HTTPException(status_code=500, detail=result.get("message", "Analysis failed"))
         
+        # Optionally store document metadata (NOT the full file for privacy)
+        document_id = None
+        if store_document:
+            doc_record = {
+                "document_id": f"doc_{uuid.uuid4().hex[:12]}",
+                "user_id": user["user_id"],
+                "filename": file.filename,
+                "file_type": file.content_type,
+                "file_size": len(file_content),
+                "analysis_summary": result["analysis"][:500] + "..." if len(result["analysis"]) > 500 else result["analysis"],
+                "query": query,
+                "analyzed_at": datetime.now(timezone.utc)
+            }
+            await db.documents.insert_one(doc_record)
+            document_id = doc_record["document_id"]
+        
         return {
             "success": True,
             "analysis": result["analysis"],
-            "model_used": result["model_used"]
+            "model_used": result["model_used"],
+            "document_id": document_id,
+            "stored": store_document
         }
         
     except HTTPException:
