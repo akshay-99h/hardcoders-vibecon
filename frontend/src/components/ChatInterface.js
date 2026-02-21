@@ -1009,7 +1009,7 @@ function ChatInterface() {
             onClick={handleNewChat}
             className="w-full bg-primary text-primary-foreground px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
           >
-            <HiPlus size={20} />
+            <Add01Icon size={20} />
             <span>New Chat</span>
           </button>
         </div>
@@ -1035,7 +1035,7 @@ function ChatInterface() {
                   onClick={(e) => handleDeleteConversation(conv.conversation_id, e)}
                   className="opacity-0 group-hover:opacity-100 text-destructive p-1 hover:bg-destructive/10 rounded transition-all"
                 >
-                  <HiTrash size={16} />
+                  <Delete02Icon size={16} />
                 </button>
               </div>
             </button>
@@ -1060,7 +1060,7 @@ function ChatInterface() {
             onClick={handleLogout}
             className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
           >
-            <HiLogout size={16} />
+            <Logout01Icon size={16} />
             <span>Logout</span>
           </button>
         </div>
@@ -1075,7 +1075,7 @@ function ChatInterface() {
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
-              <HiMenu size={20} />
+              <Menu01Icon size={20} />
             </button>
             <div>
               <h1 className="text-lg font-bold text-foreground">RakshaAI Chat</h1>
@@ -1101,7 +1101,7 @@ function ChatInterface() {
               onClick={toggleTheme}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
-              {isDark ? <HiSun size={20} /> : <HiMoon size={20} />}
+              {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
             </button>
           </div>
         </header>
@@ -1112,7 +1112,7 @@ function ChatInterface() {
             {messages.length === 0 && (
               <div className="text-center py-12">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <HiChatAlt2 size={32} className="text-primary" />
+                  <MessageMultiple01Icon size={32} className="text-primary" />
                 </div>
                 <h2 className="text-xl font-bold text-foreground mb-2">Start a conversation</h2>
                 <p className="text-muted-foreground">Ask me anything about government services</p>
@@ -1135,7 +1135,7 @@ function ChatInterface() {
                     {/* Voice indicator badge */}
                     {message.fromVoice && (
                       <div className="flex items-center gap-1 mb-1 text-xs opacity-70">
-                        <HiMicrophone size={12} />
+                        <Mic01Icon size={12} />
                         <span>Voice</span>
                       </div>
                     )}
@@ -1159,7 +1159,7 @@ function ChatInterface() {
                         className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
                         title={speakingMessageId === message.timestamp ? "Stop speaking" : "Read aloud"}
                       >
-                        <HiVolumeUp 
+                        <VolumeHighIcon 
                           size={16} 
                           className={speakingMessageId === message.timestamp ? 'text-primary animate-pulse' : ''}
                         />
@@ -1171,9 +1171,9 @@ function ChatInterface() {
                         title={copiedMessageId === message.timestamp ? "Copied!" : "Copy to clipboard"}
                       >
                         {copiedMessageId === message.timestamp ? (
-                          <HiCheck size={16} className="text-green-500" />
+                          <Tick02Icon size={16} className="text-green-500" />
                         ) : (
-                          <HiClipboardCopy size={16} />
+                          <Copy01Icon size={16} />
                         )}
                       </button>
                       
@@ -1184,7 +1184,7 @@ function ChatInterface() {
                           className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
                           title="Download as PDF"
                         >
-                          <HiDownload size={16} />
+                          <Download01Icon size={16} />
                         </button>
                       )}
                     </div>
@@ -1209,7 +1209,7 @@ function ChatInterface() {
             {isInVoiceMode && isUserSpeaking && (
               <div className="flex justify-end animate-fade-in">
                 <div className="bg-purple-500 text-white rounded-[1.4rem] px-5 py-3 flex items-center gap-2">
-                  <HiMicrophone size={16} className="animate-pulse" />
+                  <Mic01Icon size={16} className="animate-pulse" />
                   <span className="text-sm">Speaking...</span>
                 </div>
               </div>
@@ -1239,7 +1239,7 @@ function ChatInterface() {
                         {voiceState === 'speaking' && (
                           <div className="absolute inset-0 bg-blue-400 rounded-full animate-pulse"></div>
                         )}
-                        <HiMicrophone className="text-white relative z-10" size={32} />
+                        <Mic01Icon className="text-white relative z-10" size={32} />
                       </div>
                     </div>
                     
@@ -1289,7 +1289,7 @@ function ChatInterface() {
               <div className="mb-3 p-3 bg-muted rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center">
-                    <HiPaperClip className="text-primary" size={20} />
+                    <AttachmentIcon className="text-primary" size={20} />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
@@ -1303,7 +1303,7 @@ function ChatInterface() {
                   className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
                   title="Remove file"
                 >
-                  <HiTrash size={18} />
+                  <Delete02Icon size={18} />
                 </button>
               </div>
             )}
@@ -1324,7 +1324,7 @@ function ChatInterface() {
                   className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
                   title="Upload document (legal notice, certificate, etc.)"
                 >
-                  <HiPaperClip size={20} />
+                  <AttachmentIcon size={20} />
                 </button>
 
                 <button
@@ -1336,7 +1336,7 @@ function ChatInterface() {
                   }`}
                   title="Voice to text"
                 >
-                  <HiMicrophone size={20} />
+                  <Mic01Icon size={20} />
                 </button>
 
                 <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
@@ -1360,7 +1360,7 @@ function ChatInterface() {
                   {isAnalyzing ? (
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <HiPaperAirplane size={20} />
+                    <SendIcon size={20} />
                   )}
                 </button>
                 
@@ -1370,7 +1370,7 @@ function ChatInterface() {
                   className="p-3 bg-gradient-to-br from-purple-500 to-blue-500 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all flex-shrink-0"
                   title="Start AI voice conversation"
                 >
-                  <HiPhone size={20} />
+                  <Call02Icon size={20} />
                 </button>
               </div>
             )}
