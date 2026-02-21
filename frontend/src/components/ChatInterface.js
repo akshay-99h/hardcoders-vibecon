@@ -235,7 +235,7 @@ function ChatInterface() {
                   onClick={(e) => handleDeleteConversation(conv.conversation_id, e)}
                   className="opacity-0 group-hover:opacity-100 text-destructive p-1 hover:bg-destructive/10 rounded transition-all"
                 >
-                  <Icon name="delete-02" size={16} />
+                  <HiTrash size={16} />
                 </button>
               </div>
             </button>
