@@ -47,6 +47,21 @@ function LandingPage() {
       {/* Subtle background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
       
+      {/* Logo - Top Left */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="absolute top-6 left-6 z-40"
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+            <HiShieldCheck className="w-6 h-6 text-white" />
+          </div>
+          <span className="text-2xl font-bold text-primary">RakshaAI</span>
+        </div>
+      </motion.div>
+      
       {/* Theme Dropdown */}
       <div className="absolute top-6 right-6 z-50">
         <div className="relative">
@@ -98,21 +113,6 @@ function LandingPage() {
 
       {/* Main Content */}
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-20 flex items-center justify-center min-h-screen">
-        {/* Logo - Top Left */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="absolute top-0 left-6"
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <HiShieldCheck className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-2xl font-bold text-primary">HardCoders</span>
-          </div>
-        </motion.div>
-
         {/* Hero Section - Two Columns */}
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           {/* Left Column - Text Content */}
@@ -134,7 +134,7 @@ function LandingPage() {
             </p>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-4 mb-10">
               <Button
                 onClick={handleLogin}
                 size="lg"
@@ -152,6 +152,24 @@ function LandingPage() {
                 See How It Works
               </Button>
             </div>
+
+            {/* Footer Links - Desktop Only, Mobile shows at bottom */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.8 }}
+              className="hidden lg:flex flex-col gap-3"
+            >
+              <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                <button onClick={() => window.location.href = '/terms'} className="hover:text-foreground transition-colors">
+                  Terms of Service
+                </button>
+                <button onClick={() => window.location.href = '/privacy'} className="hover:text-foreground transition-colors">
+                  Privacy Policy
+                </button>
+              </div>
+              <p className="text-sm text-muted-foreground">© 2026 RakshaAI</p>
+            </motion.div>
           </motion.div>
 
           {/* Right Column - Image Placeholder */}
@@ -175,12 +193,12 @@ function LandingPage() {
           </motion.div>
         </div>
 
-        {/* Footer */}
+        {/* Footer - Mobile Only */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.8 }}
-          className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-3"
+          className="lg:hidden absolute bottom-8 left-0 right-0 flex flex-col items-center gap-3"
         >
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
             <button onClick={() => window.location.href = '/terms'} className="hover:text-foreground transition-colors">
@@ -190,7 +208,7 @@ function LandingPage() {
               Privacy Policy
             </button>
           </div>
-          <p className="text-sm text-muted-foreground">© 2026 HardCoders</p>
+          <p className="text-sm text-muted-foreground">© 2026 RakshaAI</p>
         </motion.div>
       </div>
     </div>
