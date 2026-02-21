@@ -1,17 +1,21 @@
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Header, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 import os
 import uuid
-import aiofiles
 from dotenv import load_dotenv
-import json
+from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
+
+# Import services and agents
+from config.settings import settings
+from agents.problem_understanding_agent import ProblemUnderstandingAgent
+from services.voice_service import VoiceService
 
 # Helper function to serialize datetime objects
 def serialize_doc(doc):
@@ -31,28 +35,13 @@ def serialize_doc(doc):
             serialized[key] = value
     return serialized
 
-# Import services and agents
-from config.settings import settings
-from models.schemas import (
-    User, UserSession, Mission, MissionStep, MissionRun,
-    MissionDomain, MissionStatus, UrgencyLevel
-)
-from agents.problem_understanding_agent import ProblemUnderstandingAgent
-from agents.source_verification_agent import SourceVerificationAgent
-from agents.workflow_builder_agent import WorkflowBuilderAgent
-from agents.risk_compliance_agent import RiskComplianceAgent
-from agents.language_voice_agent import LanguageVoiceAgent
-from services.voice_service import VoiceService
-from services.privacy_guard import PrivacyGuard
-from tools.calculator_tools import CalculatorTools
-
 # Initialize FastAPI app
 app = FastAPI(title="Mission-Mode Platform API", version="1.0.0")
 
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configured for development
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,21 +53,26 @@ db = mongo_client.get_database()
 
 # Initialize services
 voice_service = VoiceService()
-calculator = CalculatorTools()
+chat_agent = ProblemUnderstandingAgent()
 
-# Initialize agents
-problem_agent = ProblemUnderstandingAgent()
-source_agent = SourceVerificationAgent()
-workflow_agent = WorkflowBuilderAgent()
-risk_agent = RiskComplianceAgent()
-language_agent = LanguageVoiceAgent()
+# Pydantic Models
+class ChatMessage(BaseModel):
+    message: str
+    conversationId: Optional[str] = None
+    includeContext: Optional[bool] = True
+
+class ChatResponse(BaseModel):
+    message: str
+    conversationId: str
+    contextUsed: bool
+    model: str
+    tokensUsed: Optional[int] = None
 
 # ============== AUTH ENDPOINTS ==============
 
 @app.get("/api/auth/me")
 async def get_current_user(authorization: Optional[str] = Header(None), request: Request = None):
     """Get current user from session token"""
-    # Try to get token from Authorization header first, then cookie
     session_token = None
     
     if authorization and authorization.startswith("Bearer "):
@@ -89,7 +83,6 @@ async def get_current_user(authorization: Optional[str] = Header(None), request:
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Find session
     session_doc = await db.user_sessions.find_one(
         {"session_token": session_token},
         {"_id": 0}
@@ -98,7 +91,6 @@ async def get_current_user(authorization: Optional[str] = Header(None), request:
     if not session_doc:
         raise HTTPException(status_code=401, detail="Invalid session")
     
-    # Check expiry
     expires_at = session_doc["expires_at"]
     if isinstance(expires_at, str):
         expires_at = datetime.fromisoformat(expires_at)
@@ -108,7 +100,6 @@ async def get_current_user(authorization: Optional[str] = Header(None), request:
     if expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Session expired")
     
-    # Get user
     user_doc = await db.users.find_one(
         {"user_id": session_doc["user_id"]},
         {"_id": 0}
@@ -128,7 +119,6 @@ async def create_session(request: Request):
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
     
-    # Call Emergent Auth API
     import httpx
     async with httpx.AsyncClient() as client:
         response = await client.get(
@@ -141,15 +131,12 @@ async def create_session(request: Request):
         
         data = response.json()
     
-    # Create or update user
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     
-    # Check if user exists
     existing_user = await db.users.find_one({"email": data["email"]}, {"_id": 0})
     
     if existing_user:
         user_id = existing_user["user_id"]
-        # Update user info
         await db.users.update_one(
             {"user_id": user_id},
             {"$set": {
@@ -159,19 +146,15 @@ async def create_session(request: Request):
             }}
         )
     else:
-        # Create new user
         user_doc = {
             "user_id": user_id,
             "email": data["email"],
             "name": data["name"],
             "picture": data.get("picture"),
-            "preferred_language": "english",
-            "voice_enabled": False,
             "created_at": datetime.now(timezone.utc)
         }
         await db.users.insert_one(user_doc)
     
-    # Create session
     session_token = data["session_token"]
     expires_at = datetime.now(timezone.utc) + timedelta(days=settings.SESSION_EXPIRY_DAYS)
     
@@ -184,10 +167,7 @@ async def create_session(request: Request):
     
     await db.user_sessions.insert_one(session_doc)
     
-    # Return response with cookie
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    
-    # Serialize datetime objects for JSON response
     user_data = serialize_doc(user_doc)
     
     response = JSONResponse(content=user_data)
@@ -221,161 +201,154 @@ async def logout(authorization: Optional[str] = Header(None), request: Request =
     
     return response
 
-# ============== MISSION ENDPOINTS ==============
+# ============== CHAT ENDPOINTS ==============
 
-@app.post("/api/missions/understand")
-async def understand_problem(request: Request):
-    """Convert user input to mission intent"""
-    body = await request.json()
-    
-    result = await problem_agent.process({
-        "user_input": body.get("user_input", ""),
-        "state": body.get("state", ""),
-        "previous_context": body.get("previous_context", "")
-    })
-    
-    return result
-
-@app.post("/api/missions/create")
-async def create_mission(request: Request, authorization: Optional[str] = Header(None)):
-    """Create a new mission"""
-    # Get user
+@app.post("/api/chat")
+async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(None), request: Request = None):
+    """Send message to chat agent"""
     user = await get_current_user(authorization, request)
     
-    body = await request.json()
+    # Get or create conversation
+    conversation_id = chat_message.conversationId
+    if not conversation_id:
+        conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
+        
+        # Create new conversation
+        conversation_doc = {
+            "conversation_id": conversation_id,
+            "user_id": user["user_id"],
+            "title": chat_message.message[:50] + "..." if len(chat_message.message) > 50 else chat_message.message,
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
+        }
+        await db.conversations.insert_one(conversation_doc)
     
-    # Step 1: Understand problem
-    problem_result = await problem_agent.process({
-        "user_input": body.get("user_input", ""),
-        "state": body.get("state", ""),
-        "previous_context": body.get("previous_context", "")
-    })
-    
-    if "error" in problem_result:
-        return problem_result
-    
-    # Step 2: Verify sources
-    source_result = await source_agent.process({
-        "domain": problem_result.get("domain", ""),
-        "objective": problem_result.get("objective", ""),
-        "state": problem_result.get("state", "")
-    })
-    
-    # Step 3: Build workflow
-    workflow_result = await workflow_agent.process({
-        "domain": problem_result.get("domain", ""),
-        "objective": problem_result.get("objective", ""),
-        "state": problem_result.get("state", ""),
-        "sources": [s["url"] for s in source_result.get("sources", [])]
-    })
-    
-    # Step 4: Risk assessment
-    risk_result = await risk_agent.process({
-        "mission_steps": workflow_result.get("steps", []),
-        "sources": source_result.get("sources", []),
-        "user_input": body.get("user_input", ""),
-        "context": ""
-    })
-    
-    if not risk_result.get("allow_proceed", True):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Mission blocked for safety: {risk_result.get('recommendations', ['High risk detected'])[0]}"
-        )
-    
-    # Create mission
-    mission_id = f"mission_{uuid.uuid4().hex[:12]}"
-    
-    mission_doc = {
-        "mission_id": mission_id,
-        "user_id": user["user_id"],
-        "domain": problem_result.get("domain", ""),
-        "title": f"{problem_result.get('domain', '').replace('_', ' ').title()} - {problem_result.get('objective', '')}",
-        "objective": problem_result.get("objective", ""),
-        "briefing": f"Mission to help you with {problem_result.get('objective', '')}",
-        "state": problem_result.get("state", ""),
-        "urgency": problem_result.get("urgency", "medium"),
-        "status": "planned",
-        "steps": workflow_result.get("steps", []),
-        "current_step_index": 0,
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
-        "estimated_completion_time": workflow_result.get("estimated_completion_time", ""),
-        "documents_required": [],
-        "escalation_contacts": [],
-        "risk_assessment": risk_result,
-        "sources": source_result.get("sources", [])
+    # Save user message
+    user_message_doc = {
+        "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+        "conversation_id": conversation_id,
+        "role": "user",
+        "content": chat_message.message,
+        "timestamp": datetime.now(timezone.utc)
     }
+    await db.messages.insert_one(user_message_doc)
     
-    await db.missions.insert_one(mission_doc)
+    # Get conversation history if needed
+    context = ""
+    if chat_message.includeContext:
+        messages = []
+        async for msg in db.messages.find(
+            {"conversation_id": conversation_id},
+            {"_id": 0}
+        ).sort("timestamp", 1).limit(10):
+            messages.append(msg)
+        
+        if len(messages) > 1:
+            context = "\n".join([f"{m['role']}: {m['content']}" for m in messages[:-1]])
     
-    # Remove _id from response and serialize datetime objects
-    mission_doc.pop("_id", None)
+    # Get AI response
+    try:
+        result = await chat_agent.process({
+            "user_input": chat_message.message,
+            "previous_context": context
+        })
+        
+        # Handle different response types
+        if "error" in result:
+            assistant_message = result.get("message", "I apologize, but I encountered an error. Please try rephrasing your question.")
+        elif "clarification_needed" in result and result.get("clarification_needed"):
+            assistant_message = result.get("clarification_question", "Could you please provide more details?")
+        else:
+            # Generate helpful response based on mission intent
+            domain = result.get("domain", "")
+            objective = result.get("objective", "")
+            
+            assistant_message = f"I understand you need help with {domain} services, specifically: {objective}.\n\n"
+            assistant_message += "I can guide you through this process. What specific information would you like to know?"
     
-    return serialize_doc(mission_doc)
+    except Exception as e:
+        assistant_message = "I apologize, but I'm having trouble processing your request. Could you please rephrase?"
+    
+    # Save assistant message
+    assistant_message_doc = {
+        "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+        "conversation_id": conversation_id,
+        "role": "assistant",
+        "content": assistant_message,
+        "timestamp": datetime.now(timezone.utc)
+    }
+    await db.messages.insert_one(assistant_message_doc)
+    
+    # Update conversation
+    await db.conversations.update_one(
+        {"conversation_id": conversation_id},
+        {"$set": {"updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    return ChatResponse(
+        message=assistant_message,
+        conversationId=conversation_id,
+        contextUsed=chat_message.includeContext,
+        model=settings.PRIMARY_MODEL,
+        tokensUsed=None
+    )
 
-@app.get("/api/missions")
-async def get_missions(authorization: Optional[str] = Header(None), request: Request = None):
-    """Get all missions for current user"""
+@app.get("/api/conversations")
+async def get_conversations(authorization: Optional[str] = Header(None), request: Request = None):
+    """Get all conversations for current user"""
     user = await get_current_user(authorization, request)
     
-    missions = []
-    async for mission_doc in db.missions.find(
+    conversations = []
+    async for conv in db.conversations.find(
         {"user_id": user["user_id"]},
         {"_id": 0}
-    ).sort("created_at", -1):
-        missions.append(serialize_doc(mission_doc))
+    ).sort("updated_at", -1):
+        conversations.append(serialize_doc(conv))
     
-    return missions
+    return conversations
 
-@app.get("/api/missions/{mission_id}")
-async def get_mission(mission_id: str, authorization: Optional[str] = Header(None), request: Request = None):
-    """Get specific mission"""
-    user = await get_current_user(authorization, request)
-    
-    mission_doc = await db.missions.find_one(
-        {"mission_id": mission_id, "user_id": user["user_id"]},
-        {"_id": 0}
-    )
-    
-    if not mission_doc:
-        raise HTTPException(status_code=404, detail="Mission not found")
-    
-    return serialize_doc(mission_doc)
-
-@app.put("/api/missions/{mission_id}/step/{step_index}")
-async def update_step_status(
-    mission_id: str, 
-    step_index: int, 
-    request: Request,
-    authorization: Optional[str] = Header(None)
+@app.get("/api/conversations/{conversation_id}")
+async def get_conversation_history(
+    conversation_id: str,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
 ):
-    """Update status of a mission step"""
+    """Get conversation history"""
     user = await get_current_user(authorization, request)
-    body = await request.json()
     
-    mission_doc = await db.missions.find_one(
-        {"mission_id": mission_id, "user_id": user["user_id"]},
+    # Verify conversation belongs to user
+    conversation = await db.conversations.find_one(
+        {"conversation_id": conversation_id, "user_id": user["user_id"]},
         {"_id": 0}
     )
     
-    if not mission_doc:
-        raise HTTPException(status_code=404, detail="Mission not found")
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
     
-    # Update step status
-    if step_index < len(mission_doc["steps"]):
-        mission_doc["steps"][step_index]["status"] = body.get("status", "completed")
-        
-        await db.missions.update_one(
-            {"mission_id": mission_id},
-            {
-                "$set": {
-                    "steps": mission_doc["steps"],
-                    "current_step_index": step_index + 1 if body.get("status") == "completed" else step_index,
-                    "updated_at": datetime.now(timezone.utc)
-                }
-            }
-        )
+    messages = []
+    async for msg in db.messages.find(
+        {"conversation_id": conversation_id},
+        {"_id": 0}
+    ).sort("timestamp", 1):
+        messages.append(serialize_doc(msg))
+    
+    return {
+        "messages": messages,
+        "conversationId": conversation_id
+    }
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Delete a conversation"""
+    user = await get_current_user(authorization, request)
+    
+    # Delete conversation and messages
+    await db.conversations.delete_one({"conversation_id": conversation_id, "user_id": user["user_id"]})
+    await db.messages.delete_many({"conversation_id": conversation_id})
     
     return {"success": True}
 
@@ -388,23 +361,16 @@ async def transcribe_audio(
     authorization: Optional[str] = Header(None)
 ):
     """Transcribe audio to text"""
-    # Verify authentication
-    # user = await get_current_user(authorization, None)
-    
     try:
-        # Read audio file
         audio_content = await audio.read()
-        
-        # Save temporarily
         temp_path = f"/tmp/{uuid.uuid4().hex}.mp3"
-        async with aiofiles.open(temp_path, "wb") as f:
-            await f.write(audio_content)
         
-        # Transcribe
+        with open(temp_path, "wb") as f:
+            f.write(audio_content)
+        
         with open(temp_path, "rb") as audio_file:
             text = await voice_service.transcribe_audio(audio_file, language)
         
-        # Clean up
         os.remove(temp_path)
         
         return {"text": text}
@@ -426,42 +392,6 @@ async def synthesize_speech(request: Request, authorization: Optional[str] = Hea
         return {"audio_base64": audio_base64}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-# ============== TOOL ENDPOINTS ==============
-
-@app.post("/api/tools/emi-calculator")
-async def calculate_emi(request: Request):
-    """Calculate EMI"""
-    body = await request.json()
-    result = calculator.calculate_emi(
-        principal=body.get("principal", 0),
-        interest_rate=body.get("interest_rate", 0),
-        tenure_months=body.get("tenure_months", 0)
-    )
-    return result
-
-@app.post("/api/tools/fraud-check")
-async def check_fraud(request: Request):
-    """Check fraud probability"""
-    body = await request.json()
-    result = calculator.calculate_fraud_probability(body.get("indicators", {}))
-    return result
-
-# ============== LANGUAGE ENDPOINT ==============
-
-@app.post("/api/language/translate")
-async def translate_text(request: Request):
-    """Translate text to target language"""
-    body = await request.json()
-    
-    result = await language_agent.process({
-        "text": body.get("text", ""),
-        "target_language": body.get("target_language", "english"),
-        "mode": body.get("mode", "text"),
-        "simplify": body.get("simplify", False)
-    })
-    
-    return result
 
 # ============== HEALTH CHECK ==============
 
