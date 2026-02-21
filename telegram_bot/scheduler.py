@@ -198,8 +198,8 @@ def main():
     # Create indexes
     loop.run_until_complete(create_indexes())
     
-    # Create scheduler
-    scheduler = AsyncIOScheduler()
+    # Create scheduler with explicit event loop
+    scheduler = AsyncIOScheduler(event_loop=loop)
     
     # Add job - run every hour
     scheduler.add_job(
