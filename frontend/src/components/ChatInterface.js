@@ -1077,6 +1077,17 @@ function ChatInterface() {
                           <HiClipboardCopy size={16} />
                         )}
                       </button>
+                      
+                      {/* PDF Download button - only for generated documents */}
+                      {isGeneratedDocument(message) && (
+                        <button
+                          onClick={() => handleDownloadPDF(message)}
+                          className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                          title="Download as PDF"
+                        >
+                          <HiDownload size={16} />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
