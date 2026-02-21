@@ -298,6 +298,10 @@ function ChatInterface() {
       if (inputMessage.trim()) {
         formData.append('query', inputMessage.trim());
       }
+      // Pass current conversation ID so follow-up questions work
+      if (currentConversation) {
+        formData.append('conversation_id', currentConversation);
+      }
       
       // Call analysis API
       const response = await api.post('/api/documents/analyze', formData, {
@@ -305,6 +309,12 @@ function ChatInterface() {
           'Content-Type': 'multipart/form-data'
         }
       });
+      
+      // Update conversation ID if this was a new conversation
+      if (response.data.conversation_id && !currentConversation) {
+        setCurrentConversation(response.data.conversation_id);
+        fetchConversations(); // Refresh sidebar
+      }
       
       // Add AI analysis response
       setMessages(prev => [...prev, {
