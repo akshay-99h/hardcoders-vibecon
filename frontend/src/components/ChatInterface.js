@@ -353,6 +353,55 @@ function ChatInterface() {
     }
   };
 
+  const handleTextToSpeech = (message) => {
+    // Stop any ongoing speech
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    // Create speech synthesis utterance
+    const utterance = new SpeechSynthesisUtterance(message.content);
+    
+    // Set language based on content (basic detection)
+    if (/[\u0900-\u097F]/.test(message.content)) {
+      utterance.lang = 'hi-IN'; // Hindi
+    } else {
+      utterance.lang = 'en-US'; // English
+    }
+    
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    
+    // Track which message is being spoken
+    setSpeakingMessageId(message.timestamp);
+    
+    utterance.onend = () => {
+      setSpeakingMessageId(null);
+    };
+    
+    utterance.onerror = () => {
+      setSpeakingMessageId(null);
+    };
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleCopyToClipboard = async (message) => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedMessageId(message.timestamp);
+      
+      // Reset after 2 seconds
+      setTimeout(() => {
+        setCopiedMessageId(null);
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
   // Show loading screen while authenticating
   if (isAuthenticating) {
     return (
