@@ -810,6 +810,14 @@ function ChatInterface() {
                         : 'bg-card text-card-foreground border border-border'
                     }`}
                   >
+                    {/* Voice indicator badge */}
+                    {message.fromVoice && (
+                      <div className="flex items-center gap-1 mb-1 text-xs opacity-70">
+                        <HiMicrophone size={12} />
+                        <span>Voice</span>
+                      </div>
+                    )}
+                    
                     {message.role === 'user' ? (
                       <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                     ) : (
