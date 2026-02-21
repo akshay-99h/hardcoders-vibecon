@@ -22,9 +22,12 @@ function ChatInterface() {
   const [isDark, setIsDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState('en'); // Language for STT
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     handleAuthCallback();
