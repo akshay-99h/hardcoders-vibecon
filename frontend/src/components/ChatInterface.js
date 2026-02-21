@@ -381,10 +381,14 @@ function ChatInterface() {
   
   const processVoiceTurn = async (audioBlob) => {
     setVoiceState('thinking');
+    setIsUserSpeaking(false); // Hide "Speaking..." indicator
     
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'voice.webm');
+      
+      // Show transcribing indicator
+      console.log('📤 Sending audio to backend...');
       
       const response = await api.post(`/api/ai-call/turn?call_id=${voiceCallId}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -392,7 +396,9 @@ function ChatInterface() {
       
       const { transcribed_text, response_text } = response.data;
       
-      // ✅ Show BOTH messages together in a single state update
+      console.log('✅ Received response from backend');
+      
+      // Create messages
       const userMessage = {
         role: 'user',
         content: transcribed_text,
@@ -407,8 +413,13 @@ function ChatInterface() {
         fromVoice: true
       };
       
-      // Add both messages at once
-      setMessages(prev => [...prev, userMessage, aiMessage]);
+      // ✅ Show user message FIRST (immediately)
+      setMessages(prev => [...prev, userMessage]);
+      
+      // Small delay then show AI response (feels more natural)
+      setTimeout(() => {
+        setMessages(prev => [...prev, aiMessage]);
+      }, 100);
       
       // Update conversation ID if this was a new conversation
       if (!currentConversation && response.data.conversation_id) {
@@ -416,7 +427,7 @@ function ChatInterface() {
         fetchConversations();
       }
       
-      // Play AI response using BROWSER TEXT-TO-SPEECH (no API call)
+      // Play AI response using BROWSER TEXT-TO-SPEECH
       setVoiceState('speaking');
       
       // Clean text for better speech
@@ -465,7 +476,7 @@ function ChatInterface() {
       }
       
       // Natural speech settings
-      utterance.rate = 1.0;
+      utterance.rate = 1.1; // Slightly faster for better flow
       utterance.pitch = 1.1; // Slightly higher for female voice
       utterance.volume = 1.0;
       
