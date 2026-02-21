@@ -378,21 +378,23 @@ function ChatInterface() {
       
       const { transcribed_text, response_text } = response.data;
       
-      // ✅ IMMEDIATELY show user message (transcription)
-      setMessages(prev => [...prev, {
+      // ✅ Show BOTH messages together in a single state update
+      const userMessage = {
         role: 'user',
         content: transcribed_text,
         timestamp: new Date().toISOString(),
         fromVoice: true
-      }]);
+      };
       
-      // ✅ IMMEDIATELY show AI response text
-      setMessages(prev => [...prev, {
+      const aiMessage = {
         role: 'assistant',
         content: response_text,
         timestamp: new Date().toISOString(),
         fromVoice: true
-      }]);
+      };
+      
+      // Add both messages at once
+      setMessages(prev => [...prev, userMessage, aiMessage]);
       
       // Update conversation ID if this was a new conversation
       if (!currentConversation && response.data.conversation_id) {
