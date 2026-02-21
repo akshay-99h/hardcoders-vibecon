@@ -6,6 +6,7 @@ function BillingPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState({});
+  const [billingMeta, setBillingMeta] = useState({ currency: 'INR', interval: 'month', stripe: {} });
   const [status, setStatus] = useState(null);
   const [user, setUser] = useState(null);
   const [actionLoading, setActionLoading] = useState('');
@@ -20,7 +21,13 @@ function BillingPage() {
           api.get('/api/billing/status'),
         ]);
         setUser(meRes.data);
-        setPlans(plansRes.data?.plans || {});
+        const plansPayload = plansRes.data || {};
+        setPlans(plansPayload.plans || {});
+        setBillingMeta({
+          currency: plansPayload.currency || 'INR',
+          interval: plansPayload.interval || 'month',
+          stripe: plansPayload.stripe || {},
+        });
         setStatus(statusRes.data);
       } catch (err) {
         console.error('Billing bootstrap failed:', err);
@@ -78,6 +85,8 @@ function BillingPage() {
   }
 
   const activePlan = status?.plan_key || 'free';
+  const stripePublishableKey = billingMeta?.stripe?.publishable_key || process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || '';
+  const stripeKeyPreview = stripePublishableKey ? `${stripePublishableKey.slice(0, 12)}...` : 'Not set';
 
   return (
     <div className="min-h-screen bg-background">
@@ -114,6 +123,24 @@ function BillingPage() {
           </div>
         )}
 
+        <div className="mb-6 rounded-xl border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold text-foreground">Stripe Test Mode</h3>
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Secret key status</p>
+              <p className="font-medium text-foreground mt-1">{billingMeta?.stripe?.enabled ? 'Configured' : 'Missing'}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Publishable key status</p>
+              <p className="font-medium text-foreground mt-1">{stripePublishableKey ? 'Configured' : 'Missing'}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Publishable key preview</p>
+              <p className="font-mono text-xs text-foreground mt-1">{stripeKeyPreview}</p>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
           {sortedPlans.map((planKey) => {
             const plan = plans[planKey];
@@ -137,10 +164,13 @@ function BillingPage() {
                 </div>
                 <p className="text-2xl font-bold text-foreground mt-2">
                   {isFree ? '₹0' : `₹${plan.price_inr_monthly}`}
-                  <span className="text-sm font-normal text-muted-foreground">/mo</span>
+                  <span className="text-sm font-normal text-muted-foreground">/{billingMeta?.interval || 'month'}</span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Seats included: {plan.seats_included ?? 1}
                 </p>
                 <ul className="mt-3 text-sm text-muted-foreground space-y-1">
-                  {Object.entries(plan.limits || {}).slice(0, 5).map(([metric, limit]) => (
+                  {Object.entries(plan.limits || {}).map(([metric, limit]) => (
                     <li key={metric}>
                       {metric.replace(/_/g, ' ')}: {limit}
                     </li>
@@ -162,6 +192,20 @@ function BillingPage() {
 
         <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
           <h3 className="text-lg font-semibold text-foreground mb-4">Current Usage ({status?.period_key || '-'})</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Seat limit</p>
+              <p className="text-lg font-semibold text-foreground">{status?.seat_limit ?? 1}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Seats used</p>
+              <p className="text-lg font-semibold text-foreground">{status?.seat_used ?? 1}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Seats remaining</p>
+              <p className="text-lg font-semibold text-foreground">{status?.seats_remaining ?? 0}</p>
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {Object.entries(status?.metrics || {}).map(([metric, metricData]) => {
               const limit = metricData.limit || 0;

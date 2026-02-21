@@ -8,8 +8,10 @@ function AdminConsole() {
   const [user, setUser] = useState(null);
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
+  const [seats, setSeats] = useState([]);
   const [events, setEvents] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
+  const [seatDrafts, setSeatDrafts] = useState({});
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState('');
 
@@ -17,16 +19,28 @@ function AdminConsole() {
 
   const loadData = async () => {
     try {
-      const [overviewRes, usersRes, eventsRes, subscriptionsRes] = await Promise.all([
+      const [overviewRes, usersRes, eventsRes, subscriptionsRes, seatsRes] = await Promise.all([
         api.get('/api/admin/billing/overview'),
         api.get('/api/admin/users?limit=100'),
         api.get('/api/admin/billing/events?limit=50'),
         api.get('/api/admin/subscriptions?limit=100'),
+        api.get('/api/admin/seats?limit=100'),
       ]);
       setOverview(overviewRes.data);
-      setUsers(usersRes.data?.users || []);
+      const nextUsers = usersRes.data?.users || [];
+      setUsers(nextUsers);
       setEvents(eventsRes.data?.events || []);
       setSubscriptions(subscriptionsRes.data?.subscriptions || []);
+      setSeats(seatsRes.data?.seats || []);
+
+      const nextSeatDrafts = {};
+      nextUsers.forEach((u) => {
+        nextSeatDrafts[u.user_id] = {
+          seat_limit: Number(u.seat_limit ?? 1),
+          seat_used: Number(u.seat_used ?? 1),
+        };
+      });
+      setSeatDrafts(nextSeatDrafts);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load admin data');
     }
@@ -71,13 +85,39 @@ function AdminConsole() {
     setError('');
     try {
       await api.put(`/api/admin/users/${targetUserId}/subscription`, { plan_key, subscription_status: 'active' });
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.user_id === targetUserId ? { ...u, plan_key, subscription_status: 'active' } : u
-        )
-      );
+      await loadData();
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to update plan');
+    } finally {
+      setSavingKey('');
+    }
+  };
+
+  const updateSeatDraft = (targetUserId, field, value) => {
+    setSeatDrafts((prev) => ({
+      ...prev,
+      [targetUserId]: {
+        ...prev[targetUserId],
+        [field]: Number(value),
+      },
+    }));
+  };
+
+  const updateSeats = async (targetUserId) => {
+    const key = `seats:${targetUserId}`;
+    const draft = seatDrafts[targetUserId];
+    if (!draft) return;
+
+    setSavingKey(key);
+    setError('');
+    try {
+      await api.put(`/api/admin/users/${targetUserId}/seats`, {
+        seat_limit: Number(draft.seat_limit),
+        seat_used: Number(draft.seat_used),
+      });
+      await loadData();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update seats');
     } finally {
       setSavingKey('');
     }
@@ -140,11 +180,18 @@ function AdminConsole() {
             label="Stripe Mode"
             value={overview?.stripe_test_mode ? 'Configured' : 'Not Configured'}
           />
+          <MetricCard label="Total Seats" value={overview?.seat_limit_total ?? '-'} />
+          <MetricCard label="Seats Used" value={overview?.seat_used_total ?? '-'} />
+          <MetricCard label="Seats Available" value={overview?.seat_available_total ?? '-'} />
+          <MetricCard
+            label="Publishable Key"
+            value={overview?.stripe_publishable_key_configured ? 'Configured' : 'Missing'}
+          />
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4 sm:p-5 overflow-x-auto">
           <h3 className="text-lg font-semibold text-foreground mb-4">Users</h3>
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[980px] text-sm">
             <thead>
               <tr className="text-left text-muted-foreground border-b border-border">
                 <th className="py-2">Name</th>
@@ -152,6 +199,7 @@ function AdminConsole() {
                 <th className="py-2">Role</th>
                 <th className="py-2">Plan</th>
                 <th className="py-2">Subscription</th>
+                <th className="py-2">Seats</th>
               </tr>
             </thead>
             <tbody>
@@ -185,6 +233,34 @@ function AdminConsole() {
                     </select>
                   </td>
                   <td className="py-2 text-muted-foreground">{u.subscription_status || 'inactive'}</td>
+                  <td className="py-2">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={1}
+                        value={seatDrafts[u.user_id]?.seat_used ?? u.seat_used ?? 1}
+                        onChange={(e) => updateSeatDraft(u.user_id, 'seat_used', e.target.value)}
+                        className="w-16 px-2 py-1 rounded-md border border-border bg-background text-foreground"
+                        title="Seats used"
+                      />
+                      <span className="text-muted-foreground">/</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={seatDrafts[u.user_id]?.seat_limit ?? u.seat_limit ?? 1}
+                        onChange={(e) => updateSeatDraft(u.user_id, 'seat_limit', e.target.value)}
+                        className="w-16 px-2 py-1 rounded-md border border-border bg-background text-foreground"
+                        title="Seat limit"
+                      />
+                      <button
+                        onClick={() => updateSeats(u.user_id)}
+                        disabled={savingKey === `seats:${u.user_id}`}
+                        className="px-2 py-1 rounded-md border border-border hover:bg-accent text-foreground"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -193,6 +269,35 @@ function AdminConsole() {
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-6">
           <div className="rounded-xl border border-border bg-card p-4 sm:p-5 overflow-x-auto">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Seat Allocation</h3>
+            <table className="w-full min-w-[520px] text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="py-2">User</th>
+                  <th className="py-2">Plan</th>
+                  <th className="py-2">Seats</th>
+                </tr>
+              </thead>
+              <tbody>
+                {seats.map((seat) => (
+                  <tr key={`${seat.user_id}-${seat.updated_at || ''}`} className="border-b border-border">
+                    <td className="py-2 text-foreground">{seat.email || seat.user_id}</td>
+                    <td className="py-2 text-muted-foreground">{seat.plan_key || 'free'}</td>
+                    <td className="py-2 text-muted-foreground">
+                      {seat.seat_used ?? 0} / {seat.seat_limit ?? 0}
+                    </td>
+                  </tr>
+                ))}
+                {seats.length === 0 && (
+                  <tr>
+                    <td className="py-3 text-muted-foreground" colSpan={3}>No seat allocations available.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4 sm:p-5 overflow-x-auto">
             <h3 className="text-lg font-semibold text-foreground mb-4">Subscriptions</h3>
             <table className="w-full min-w-[520px] text-sm">
               <thead>
@@ -200,6 +305,7 @@ function AdminConsole() {
                   <th className="py-2">User</th>
                   <th className="py-2">Plan</th>
                   <th className="py-2">Status</th>
+                  <th className="py-2">Seats</th>
                   <th className="py-2">Updated</th>
                 </tr>
               </thead>
@@ -210,13 +316,16 @@ function AdminConsole() {
                     <td className="py-2 text-muted-foreground">{sub.plan_key || 'free'}</td>
                     <td className="py-2 text-muted-foreground">{sub.subscription_status || 'inactive'}</td>
                     <td className="py-2 text-muted-foreground">
+                      {sub.seat_used ?? 0} / {sub.seat_limit ?? 0}
+                    </td>
+                    <td className="py-2 text-muted-foreground">
                       {sub.updated_at ? new Date(sub.updated_at).toLocaleString() : '-'}
                     </td>
                   </tr>
                 ))}
                 {subscriptions.length === 0 && (
                   <tr>
-                    <td className="py-3 text-muted-foreground" colSpan={4}>No paid subscriptions yet.</td>
+                    <td className="py-3 text-muted-foreground" colSpan={5}>No paid subscriptions yet.</td>
                   </tr>
                 )}
               </tbody>
