@@ -6,61 +6,45 @@ class PrivacyGuard:
     
     # Sensitive patterns that should never be requested by AI
     SENSITIVE_PATTERNS = [
-        # Aadhaar patterns
+        # Aadhaar numbers only (12 digits)
         (r'\b\d{4}\s*\d{4}\s*\d{4}\b', "aadhaar_number"),
         (r'\b\d{12}\b', "aadhaar_number"),
-        (r'aadhaar\s*number', "aadhaar_request"),
-        (r'enter\s*aadhaar', "aadhaar_request"),
+        (r'(your|my|enter|provide|share|give|tell)\s+(aadhaar|aadhar)\s+number', "aadhaar_number_request"),
         
-        # PAN patterns
+        # PAN numbers only
         (r'\b[A-Z]{5}\d{4}[A-Z]\b', "pan_number"),
-        (r'pan\s*number', "pan_request"),
-        (r'enter\s*pan', "pan_request"),
+        (r'(your|my|enter|provide|share|give|tell)\s+pan\s+number', "pan_number_request"),
         
         # OTP patterns
         (r'\b\d{4,6}\s*otp\b', "otp"),
-        (r'enter\s*otp', "otp_request"),
-        (r'provide\s*otp', "otp_request"),
-        (r'share\s*otp', "otp_request"),
+        (r'(enter|provide|share|give|tell)\s+otp', "otp_request"),
+        (r'(your|my)\s+otp', "otp_request"),
         
         # Password patterns
-        (r'password', "password_request"),
-        (r'enter\s*password', "password_request"),
-        (r'provide\s*password', "password_request"),
+        (r'(enter|provide|share|give|tell)\s+password', "password_request"),
+        (r'(your|my)\s+password', "password_request"),
         
         # Bank details
-        (r'bank\s*account\s*number', "bank_account_request"),
-        (r'ifsc\s*code', "bank_details_request"),
-        (r'account\s*number', "account_request"),
+        (r'(your|my|enter|provide|share)\s+(bank|account)\s+number', "bank_account_request"),
+        (r'(enter|provide|share)\s+ifsc', "bank_details_request"),
         
-        # Phone number patterns
-        (r'\b\d{10}\b', "phone_number"),
-        (r'mobile\s*number', "phone_request"),
-        (r'phone\s*number', "phone_request"),
+        # CVV/PIN
+        (r'(enter|provide|share|give|tell)\s+(cvv|pin)', "cvv_pin_request"),
     ]
     
-    # Sensitive keywords that indicate requests for sensitive data
-    SENSITIVE_KEYWORDS = [
-        "aadhaar", "aadhar", "pan card", "password", "otp",
-        "bank account", "credit card", "debit card", "cvv",
-        "pin", "secret", "private key"
-    ]
+    # Note: Removed general keywords like "aadhaar", "pan" etc. 
+    # We only block if someone is asking to share/enter actual sensitive data
     
     @staticmethod
     def detect_sensitive_content(text: str) -> Tuple[bool, List[str]]:
-        """Detect if text contains sensitive information or requests"""
+        """Detect if text contains actual sensitive information or requests to share it"""
         text_lower = text.lower()
         detected = []
         
-        # Check patterns
+        # Check patterns for actual sensitive data requests
         for pattern, label in PrivacyGuard.SENSITIVE_PATTERNS:
             if re.search(pattern, text_lower, re.IGNORECASE):
                 detected.append(label)
-        
-        # Check keywords
-        for keyword in PrivacyGuard.SENSITIVE_KEYWORDS:
-            if keyword in text_lower:
-                detected.append(keyword)
         
         return len(detected) > 0, detected
     
