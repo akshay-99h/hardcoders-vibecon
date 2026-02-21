@@ -16,6 +16,7 @@ load_dotenv()
 from config.settings import settings
 from agents.problem_understanding_agent import ProblemUnderstandingAgent
 from services.voice_service import VoiceService
+from services.context_service import ContextService
 
 # Helper function to serialize datetime objects
 def serialize_doc(doc):
@@ -54,6 +55,14 @@ db = mongo_client.get_database()
 # Initialize services
 voice_service = VoiceService()
 chat_agent = ProblemUnderstandingAgent()
+context_service = ContextService()
+
+# Load context files on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    print("Loading knowledge base context files...")
+    context_service.load_context_files()
 
 # Pydantic Models
 class ChatMessage(BaseModel):
