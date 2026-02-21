@@ -9,6 +9,7 @@ import ChatInterface from './components/ChatInterface';
 import HowItWorks from './components/HowItWorks';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
+import AICall from './pages/AICall';
 
 function AppRouter() {
   return (
@@ -18,6 +19,7 @@ function AppRouter() {
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/chat" element={<ChatInterface />} />
+      <Route path="/call" element={<AICall />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
