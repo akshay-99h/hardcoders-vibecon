@@ -33,23 +33,52 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = Bot(token=BOT_TOKEN)
 
 
-async def send_reminder(chat_id: int, service_type: str, action_type: str) -> bool:
+async def send_reminder(chat_id: int, service_type: str, action_type: str, reminder_data: dict = None) -> bool:
     """
     Send reminder message to user
     Returns True if successful, False otherwise
+    
+    Args:
+        chat_id: Telegram chat ID
+        service_type: Type of service (e.g., "RTI Application")
+        action_type: Action type (rti, complaint, etc.)
+        reminder_data: Additional reminder metadata (e.g., created_at for calculating days)
     """
     try:
-        # Create reminder message based on action type
+        # Check if RTI is overdue (>30 days) and offer First Appeal
+        is_rti_overdue = False
+        if action_type == "rti" and reminder_data:
+            created_at = reminder_data.get("created_at")
+            if created_at:
+                days_since_creation = (datetime.utcnow() - created_at).days
+                # RTI response due in 30 days, so if created >30 days ago, it's overdue
+                if days_since_creation > 30:
+                    is_rti_overdue = True
+        
+        # Create reminder message based on action type and status
         if action_type == "rti":
-            message = (
-                f"⏰ *Reminder: RTI Follow-up*\n\n"
-                f"Your {service_type} may still be pending.\n\n"
-                f"*You can:*\n"
-                f"1️⃣ Generate First Appeal (if 30 days passed)\n"
-                f"2️⃣ File complaint with higher authority\n"
-                f"3️⃣ Check status online\n\n"
-                f"Reply with what you'd like to do, or ask me any question!"
-            )
+            if is_rti_overdue:
+                message = (
+                    f"⚠️ *RTI OVERDUE - First Appeal Available*\n\n"
+                    f"Your {service_type} was filed more than 30 days ago. "
+                    f"As per RTI Act Section 7, you should have received a response by now.\n\n"
+                    f"*Next Steps:*\n"
+                    f"1️⃣ File First Appeal (Section 19) - I can generate this for you\n"
+                    f"2️⃣ Check RTI status online at rtionline.gov.in\n"
+                    f"3️⃣ Contact the Public Information Officer directly\n\n"
+                    f"*Would you like me to generate a First Appeal?*\n"
+                    f"Reply 'Yes' to generate First Appeal, or ask me anything else!"
+                )
+            else:
+                message = (
+                    f"⏰ *Reminder: RTI Follow-up*\n\n"
+                    f"Your {service_type} may still be pending.\n\n"
+                    f"*You can:*\n"
+                    f"1️⃣ Check status on rtionline.gov.in\n"
+                    f"2️⃣ Generate First Appeal (if 30 days passed)\n"
+                    f"3️⃣ File complaint with higher authority\n\n"
+                    f"Reply with what you'd like to do, or ask me any question!"
+                )
         elif action_type == "complaint":
             message = (
                 f"⏰ *Reminder: Complaint Follow-up*\n\n"
@@ -78,7 +107,7 @@ async def send_reminder(chat_id: int, service_type: str, action_type: str) -> bo
             parse_mode='Markdown'
         )
         
-        logger.info(f"✅ Sent reminder to {chat_id} for {service_type}")
+        logger.info(f"✅ Sent reminder to {chat_id} for {service_type} (Overdue: {is_rti_overdue})")
         return True
         
     except Forbidden:
@@ -140,7 +169,12 @@ async def process_reminders():
                 continue
             
             # Send reminder
-            success = await send_reminder(chat_id, service_type, action_type)
+            success = await send_reminder(
+                chat_id=chat_id, 
+                service_type=service_type, 
+                action_type=action_type,
+                reminder_data=reminder  # Pass reminder data to check overdue status
+            )
             
             # Update status
             if success:
