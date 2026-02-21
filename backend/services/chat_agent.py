@@ -25,7 +25,11 @@ IMPORTANT PRIVACY RULES:
 - Remind users to verify they're on official .gov.in websites
 
 Be helpful, friendly, and concise. Focus on giving practical step-by-step instructions."""
-        super().__init__(system_message)
+        
+        self.llm_service = LLMService(
+            system_message=system_message,
+            model="claude-sonnet-4.5"
+        )
     
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process user input and provide helpful guidance
