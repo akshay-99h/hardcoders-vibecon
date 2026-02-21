@@ -974,7 +974,7 @@ function ChatInterface() {
                         {voiceState === 'speaking' && 'RakshaAI is speaking...'}
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        {voiceState === 'listening' && 'Speak now or tap to send'}
+                        {voiceState === 'listening' && 'Speak naturally - I\'ll detect when you\'re done'}
                         {voiceState === 'thinking' && 'Analyzing your question...'}
                         {voiceState === 'speaking' && 'Listen to the response...'}
                       </p>
@@ -982,16 +982,6 @@ function ChatInterface() {
                   </div>
                   
                   <div className="flex gap-2">
-                    {voiceState === 'listening' && (
-                      <button
-                        onClick={stopVoiceListening}
-                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-all"
-                        title="Send now"
-                      >
-                        Send
-                      </button>
-                    )}
-                    
                     <button
                       onClick={endVoiceConversation}
                       className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:opacity-90 transition-all"
