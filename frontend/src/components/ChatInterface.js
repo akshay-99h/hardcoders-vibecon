@@ -275,7 +275,7 @@ function ChatInterface() {
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
-              <Icon name="menu-01" size={20} />
+              <HiMenu size={20} />
             </button>
             <div>
               <h1 className="text-lg font-bold text-foreground">Government Services Assistant</h1>
