@@ -48,9 +48,6 @@ function ChatInterface() {
       }
       
       // Cleanup voice mode if active
-      if (voiceAudioRef.current) {
-        voiceAudioRef.current.pause();
-      }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
