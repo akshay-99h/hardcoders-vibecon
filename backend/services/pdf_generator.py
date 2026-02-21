@@ -246,76 +246,139 @@ class PDFGeneratorService:
                     heading_style = ParagraphStyle(
                         'Heading',
                         parent=styles['Heading3'],
-                        fontSize=11,
+                        fontSize=12,
                         textColor=colors.HexColor('#000000'),
-                        spaceAfter=8,
-                        spaceBefore=12,
-                        fontName='Helvetica-Bold',
-                        leading=14
+                        spaceAfter=10,
+                        spaceBefore=14,
+                        fontName='Times-Bold',
+                        leading=15
                     )
                     elements.append(Paragraph(line, heading_style))
                 else:
                     # Regular body text
                     elements.append(Paragraph(line, body_style))
         
+        # Add signature space
+        elements.append(Spacer(1, 0.5*inch))
+        
+        # Add a box for signature and stamp
+        signature_box_style = ParagraphStyle(
+            'SignatureBox',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#666666'),
+            alignment=TA_RIGHT,
+            fontName='Times-Roman'
+        )
+        
+        # Signature placeholder
+        signature_table = Table(
+            [
+                [''],
+                ['(Signature)'],
+                [''],
+                ['Place for Stamp/Seal']
+            ],
+            colWidths=[2.5*inch],
+            style=TableStyle([
+                ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#999999')),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Times-Roman'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#666666')),
+                ('TOPPADDING', (0, 0), (-1, -1), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ])
+        )
+        
+        # Right-align the signature box
+        elements.append(Table(
+            [[signature_table]],
+            colWidths=[6.5*inch],
+            style=TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+            ])
+        ))
+        
         # Add professional footer section
         elements.append(Spacer(1, 0.4*inch))
         
-        # Separator line
+        # Separator line - more prominent
         elements.append(Table(
             [['']], 
             colWidths=[6.5*inch],
             style=TableStyle([
-                ('LINEABOVE', (0, 0), (-1, 0), 0.5, colors.HexColor('#cccccc')),
+                ('LINEABOVE', (0, 0), (-1, 0), 1, colors.HexColor('#003366')),
             ])
         ))
         
         elements.append(Spacer(1, 0.15*inch))
         
-        # Instructions box
+        # Instructions box - more formal
         instruction_style = ParagraphStyle(
             'Instruction',
             parent=styles['Normal'],
             fontSize=9,
-            textColor=colors.HexColor('#444444'),
+            textColor=colors.HexColor('#333333'),
             alignment=TA_LEFT,
             leftIndent=10,
-            spaceAfter=4,
-            fontName='Helvetica'
+            spaceAfter=5,
+            fontName='Times-Roman'
         )
         
         instructions = [
-            "<b>📋 Filing Instructions:</b>",
-            "• Print this document on standard A4 white paper",
-            "• Sign where your name appears",
-            "• Attach all supporting documents mentioned in 'Enclosures'",
-            "• Keep one photocopy for your personal records",
-            "• Send by registered post or speed post to the address mentioned",
-            "• Preserve the postal receipt as proof of submission"
+            "<b>FILING INSTRUCTIONS:</b>",
+            "1. Print this document on standard A4 white paper (70-80 GSM)",
+            "2. Sign above the printed name where indicated",
+            "3. Affix stamp/seal if applicable",
+            "4. Attach all supporting documents as listed in 'Enclosures'",
+            "5. Retain one photocopy for personal records with postal receipt",
+            "6. Send via Registered Post/Speed Post to the address mentioned above",
+            "7. Note the postal tracking number for future reference"
         ]
         
         for instruction in instructions:
             elements.append(Paragraph(instruction, instruction_style))
         
-        # Disclaimer
-        elements.append(Spacer(1, 0.2*inch))
+        # Official disclaimer
+        elements.append(Spacer(1, 0.25*inch))
         
+        # Disclaimer box with border
         disclaimer_style = ParagraphStyle(
             'Disclaimer',
             parent=styles['Normal'],
-            fontSize=7,
-            textColor=colors.HexColor('#888888'),
-            alignment=TA_CENTER,
-            fontName='Helvetica-Oblique'
+            fontSize=8,
+            textColor=colors.HexColor('#555555'),
+            alignment=TA_JUSTIFY,
+            fontName='Times-Italic',
+            leading=11,
+            leftIndent=5,
+            rightIndent=5
         )
         
-        disclaimer = Paragraph(
-            "<b>Disclaimer:</b> This is an AI-generated document draft by RakshaAI. "
-            "Please verify all details, dates, and information before submission to ensure accuracy. "
-            "For complex legal matters, consult a licensed advocate. Free legal aid: NALSA helpline 15100 | nalsa.gov.in",
-            disclaimer_style
+        disclaimer_text = (
+            "<b>DISCLAIMER:</b> This document has been generated by RakshaAI, an AI-powered assistant. "
+            "This is a draft template and should be carefully reviewed before submission. "
+            "The user is responsible for verifying all information, dates, addresses, and legal compliance. "
+            "For complex legal matters or professional advice, please consult a licensed advocate. "
+            "<b>Free Legal Aid:</b> NALSA Helpline 15100 | www.nalsa.gov.in | "
+            "<b>RTI Portal:</b> rtionline.gov.in"
         )
-        elements.append(disclaimer)
+        
+        disclaimer_table = Table(
+            [[Paragraph(disclaimer_text, disclaimer_style)]],
+            colWidths=[6.5*inch],
+            style=TableStyle([
+                ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#999999')),
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ])
+        )
+        elements.append(disclaimer_table)
         
         # Build PDF
         doc.build(elements)
