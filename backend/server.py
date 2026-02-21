@@ -413,6 +413,7 @@ async def synthesize_speech(request: Request, authorization: Optional[str] = Hea
 async def analyze_document(
     file: UploadFile = File(...),
     query: Optional[str] = None,
+    conversation_id: Optional[str] = None,
     store_document: bool = False,
     authorization: Optional[str] = Header(None),
     request: Request = None
@@ -465,12 +466,63 @@ async def analyze_document(
         if not result.get("success"):
             raise HTTPException(status_code=500, detail=result.get("message", "Analysis failed"))
         
+        # Get or create conversation for document context
+        if not conversation_id:
+            conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
+            conversation_doc = {
+                "conversation_id": conversation_id,
+                "user_id": user["user_id"],
+                "title": f"Document: {file.filename}",
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
+            }
+            await db.conversations.insert_one(conversation_doc)
+        
+        # Save document context message - allows follow-up questions
+        document_context_msg = {
+            "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+            "conversation_id": conversation_id,
+            "role": "system",
+            "content": f"[DOCUMENT CONTEXT - {file.filename}]\n\n{result['analysis']}",
+            "timestamp": datetime.now(timezone.utc),
+            "is_document_context": True,
+            "document_filename": file.filename
+        }
+        await db.messages.insert_one(document_context_msg)
+        
+        # If user asked a question, save it and answer as messages
+        if query:
+            user_msg = {
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "conversation_id": conversation_id,
+                "role": "user",
+                "content": f"📄 {file.filename}: {query}",
+                "timestamp": datetime.now(timezone.utc)
+            }
+            await db.messages.insert_one(user_msg)
+            
+            assistant_msg = {
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "conversation_id": conversation_id,
+                "role": "assistant",
+                "content": result["analysis"],
+                "timestamp": datetime.now(timezone.utc)
+            }
+            await db.messages.insert_one(assistant_msg)
+        
+        # Update conversation timestamp
+        await db.conversations.update_one(
+            {"conversation_id": conversation_id},
+            {"$set": {"updated_at": datetime.now(timezone.utc)}}
+        )
+        
         # Optionally store document metadata (NOT the full file for privacy)
         document_id = None
         if store_document:
             doc_record = {
                 "document_id": f"doc_{uuid.uuid4().hex[:12]}",
                 "user_id": user["user_id"],
+                "conversation_id": conversation_id,
                 "filename": file.filename,
                 "file_type": file.content_type,
                 "file_size": len(file_content),
@@ -485,6 +537,7 @@ async def analyze_document(
             "success": True,
             "analysis": result["analysis"],
             "model_used": result["model_used"],
+            "conversation_id": conversation_id,
             "document_id": document_id,
             "stored": store_document
         }
