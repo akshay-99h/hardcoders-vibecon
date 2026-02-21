@@ -380,9 +380,9 @@ function ChatInterface() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
-      const { transcribed_text, response_text, response_audio_base64 } = response.data;
+      const { transcribed_text, response_text } = response.data;
       
-      // Add user message to chat (transcribed)
+      // ✅ IMMEDIATELY show user message (transcription)
       setMessages(prev => [...prev, {
         role: 'user',
         content: transcribed_text,
@@ -390,7 +390,7 @@ function ChatInterface() {
         fromVoice: true
       }]);
       
-      // Add AI response to chat
+      // ✅ IMMEDIATELY show AI response text
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: response_text,
@@ -404,12 +404,47 @@ function ChatInterface() {
         fetchConversations();
       }
       
-      // Play AI audio response
+      // Play AI response using BROWSER TEXT-TO-SPEECH (no API call)
       setVoiceState('speaking');
-      const audio = new Audio(`data:audio/mp3;base64,${response_audio_base64}`);
-      voiceAudioRef.current = audio;
       
-      audio.onended = () => {
+      // Clean text for better speech
+      let cleanText = response_text;
+      // Remove emojis
+      cleanText = cleanText.replace(/[\u{1F600}-\u{1F64F}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F300}-\u{1F5FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F680}-\u{1F6FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F700}-\u{1F77F}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F780}-\u{1F7FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F800}-\u{1F8FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1F900}-\u{1F9FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1FA00}-\u{1FA6F}]/gu, '');
+      cleanText = cleanText.replace(/[\u{1FA70}-\u{1FAFF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{2600}-\u{26FF}]/gu, '');
+      cleanText = cleanText.replace(/[\u{2700}-\u{27BF}]/gu, '');
+      
+      // Use browser's native speech synthesis
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      
+      // Try to get a female voice
+      const voices = window.speechSynthesis.getVoices();
+      const femaleVoice = voices.find(voice => 
+        voice.name.toLowerCase().includes('female') || 
+        voice.name.toLowerCase().includes('samantha') ||
+        voice.name.toLowerCase().includes('zira') ||
+        voice.name.toLowerCase().includes('google हिन्दी') ||
+        voice.lang.includes('hi') // Hindi voice
+      );
+      
+      if (femaleVoice) {
+        utterance.voice = femaleVoice;
+      }
+      
+      // Natural speech settings
+      utterance.rate = 1.0;
+      utterance.pitch = 1.1; // Slightly higher for female voice
+      utterance.volume = 1.0;
+      
+      utterance.onend = () => {
         // Continue the conversation loop
         if (isInVoiceModeRef.current) {
           setVoiceState('listening');
@@ -417,16 +452,16 @@ function ChatInterface() {
         }
       };
       
-      audio.onerror = (e) => {
-        console.error('Audio playback error:', e);
-        // Continue even if audio fails
+      utterance.onerror = (e) => {
+        console.error('Speech synthesis error:', e);
+        // Continue even if speech fails
         if (isInVoiceModeRef.current) {
           setVoiceState('listening');
           startVoiceListening();
         }
       };
       
-      audio.play();
+      window.speechSynthesis.speak(utterance);
       
     } catch (error) {
       console.error('Voice turn error:', error);
