@@ -11,34 +11,46 @@ import uuid
 class AICallService:
     """Service for managing AI voice calls"""
     
+    # Class-level storage for call sessions (persists across requests)
+    _active_calls: Dict[str, Dict[str, Any]] = {}
+    
     def __init__(self):
         self.voice_service = VoiceService()
         self.chat_agent = ChatAgent()
         self.context_service = ContextService()
-        # Active call sessions: call_id -> {user_id, conversation_id, language}
-        self.active_calls: Dict[str, Dict[str, Any]] = {}
     
     def create_call_session(self, user_id: str, conversation_id: str = None, language: str = "en") -> str:
         """Create a new AI call session"""
         call_id = f"call_{uuid.uuid4().hex[:12]}"
         
-        self.active_calls[call_id] = {
+        self._active_calls[call_id] = {
             "user_id": user_id,
             "conversation_id": conversation_id,
             "language": language,
-            "turn_count": 0
+            "turn_count": 0,
+            "created_at": datetime.now(timezone.utc)
         }
+        
+        print(f"✅ Created call session: {call_id} for user {user_id}")
+        print(f"📋 Active sessions: {list(self._active_calls.keys())}")
         
         return call_id
     
     def get_call_session(self, call_id: str) -> Dict[str, Any]:
         """Get call session info"""
-        return self.active_calls.get(call_id)
+        session = self._active_calls.get(call_id)
+        if session:
+            print(f"✅ Found call session: {call_id}")
+        else:
+            print(f"❌ Call session not found: {call_id}")
+            print(f"📋 Available sessions: {list(self._active_calls.keys())}")
+        return session
     
     def end_call_session(self, call_id: str):
         """End call session"""
-        if call_id in self.active_calls:
-            del self.active_calls[call_id]
+        if call_id in self._active_calls:
+            del self._active_calls[call_id]
+            print(f"✅ Ended call session: {call_id}")
     
     async def process_audio_turn(
         self, 
