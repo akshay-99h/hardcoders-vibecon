@@ -83,12 +83,18 @@ function AICall() {
     setCallState('thinking');
     
     try {
+      console.log('Sending audio to AI, blob size:', audioBlob.size);
+      
       const formData = new FormData();
       formData.append('audio', audioBlob, 'audio.webm');
+      
+      console.log('Call ID:', callId);
       
       const response = await api.post(`/api/ai-call/turn?call_id=${callId}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      
+      console.log('AI response:', response.data);
       
       setTranscription(response.data.transcribed_text);
       setAiResponse(response.data.response_text);
@@ -100,9 +106,16 @@ function AICall() {
         setCallState('listening');
         startRecording();
       };
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
+        setCallState('listening');
+        startRecording();
+      };
       audio.play();
     } catch (err) {
       console.error('AI call turn error:', err);
+      console.error('Error details:', err.response?.data || err.message);
+      alert(`Call error: ${err.response?.data?.detail || err.message}`);
       setCallState('ended');
     }
   };
