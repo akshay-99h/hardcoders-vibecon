@@ -17,6 +17,7 @@ function ChatInterface() {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -42,6 +43,8 @@ function ChatInterface() {
   }, [messages]);
 
   const handleAuthCallback = async () => {
+    setIsAuthenticating(true);
+    
     // Check if there's a session_id in the URL hash (OAuth callback)
     const hash = window.location.hash;
     if (hash && hash.includes('session_id')) {
@@ -50,6 +53,8 @@ function ChatInterface() {
         const sessionId = params.get('session_id');
         
         if (sessionId) {
+          console.log('Processing OAuth callback with session_id');
+          
           // Exchange session_id for session_token
           const response = await api.post('/api/auth/session', {
             session_id: sessionId,
@@ -62,25 +67,29 @@ function ChatInterface() {
           window.history.replaceState(null, '', window.location.pathname);
           
           // Fetch conversations after successful auth
-          fetchConversations();
+          await fetchConversations();
+          setIsAuthenticating(false);
+          console.log('Authentication successful');
           return;
         }
       } catch (error) {
         console.error('Auth callback error:', error);
+        setIsAuthenticating(false);
         navigate('/');
         return;
       }
     }
     
     // If no session_id in URL, check existing auth
-    checkAuth();
+    await checkAuth();
+    setIsAuthenticating(false);
   };
 
   const checkAuth = async () => {
     try {
       const response = await api.get('/api/auth/me');
       setUser(response.data);
-      fetchConversations();
+      await fetchConversations();
     } catch (error) {
       console.error('Auth check failed:', error);
       navigate('/');
