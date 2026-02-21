@@ -289,6 +289,7 @@ function ChatInterface() {
           
           if (!speechDetected && speechFrames > MIN_SPEECH_FRAMES) {
             speechDetected = true;
+            setIsUserSpeaking(true); // Show "Speaking..." in UI
             console.log('🎤 Speech detected, monitoring for end...');
           }
           
@@ -298,6 +299,7 @@ function ChatInterface() {
           consecutiveSilenceFrames++;
           
           if (consecutiveSilenceFrames >= SILENCE_FRAMES_NEEDED) {
+            setIsUserSpeaking(false); // Hide "Speaking..."
             console.log('🔇 Silence detected after speech - auto-sending');
             if (audioContext.state !== 'closed') {
               audioContext.close();
