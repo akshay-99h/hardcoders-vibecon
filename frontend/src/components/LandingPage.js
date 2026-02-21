@@ -36,15 +36,14 @@ function LandingPage() {
           </div>
           
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-            Navigate Government<br />Services with{' '}
+            Chat Your Way Through<br />Government Services with{' '}
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-400">
-              AI Precision
+              AI Assistance
             </span>
           </h1>
           
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Get step-by-step guidance for Aadhaar, PAN, Driving License, and more.
-            Mission-mode execution with voice support, multilingual help, and official source verification.
+            Simply chat with our AI guide about what you need. Get personalized step-by-step guidance for Aadhaar, PAN, Driving License, and more - all in a friendly conversation.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
