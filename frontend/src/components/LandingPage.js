@@ -98,7 +98,7 @@ function LandingPage() {
                   theme === 'light' ? "bg-accent text-accent-foreground" : "text-foreground"
                 )}
               >
-                <Sun03Icon size={16} />
+                <HiSun className="w-4 h-4" />
                 <span>Light</span>
               </button>
               <button
@@ -108,7 +108,7 @@ function LandingPage() {
                   theme === 'dark' ? "bg-accent text-accent-foreground" : "text-foreground"
                 )}
               >
-                <Moon02Icon size={16} />
+                <HiMoon className="w-4 h-4" />
                 <span>Dark</span>
               </button>
             </motion.div>
