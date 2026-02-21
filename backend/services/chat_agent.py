@@ -112,7 +112,7 @@ REMEMBER: Your goal is to make Indian citizens feel supported, informed, and cap
         
         self.llm_service = LLMService(
             system_message=system_message,
-            model="claude-sonnet-4.5"
+            model="claude-sonnet-4-5-20250929"
         )
     
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
