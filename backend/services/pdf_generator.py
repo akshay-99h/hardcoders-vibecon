@@ -1,6 +1,6 @@
 """
 PDF Generation Service for RakshaAI Documents
-Enhanced professional formatting
+Enhanced professional formatting with official government-style appearance
 """
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -8,12 +8,45 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
 from reportlab.lib import colors
+from reportlab.pdfgen import canvas
 from io import BytesIO
 from datetime import datetime
+import uuid
 
 
 class PDFGeneratorService:
-    """Service to generate professional PDF documents"""
+    """Service to generate professional PDF documents with official appearance"""
+    
+    @staticmethod
+    def _add_header_footer(canvas_obj, doc):
+        """Add official-looking header and footer to each page"""
+        canvas_obj.saveState()
+        
+        width, height = A4
+        
+        # Header - Official document marker
+        canvas_obj.setStrokeColor(colors.HexColor('#003366'))
+        canvas_obj.setLineWidth(2)
+        canvas_obj.line(0.75*inch, height - 0.5*inch, width - 0.75*inch, height - 0.5*inch)
+        
+        # Reference number (top right corner)
+        canvas_obj.setFont('Times-Roman', 9)
+        canvas_obj.setFillColor(colors.HexColor('#666666'))
+        ref_num = f"Ref: RAI/{datetime.now().strftime('%Y%m')}/{uuid.uuid4().hex[:8].upper()}"
+        canvas_obj.drawRightString(width - 0.75*inch, height - 0.35*inch, ref_num)
+        
+        # Footer - Page number
+        canvas_obj.setFont('Times-Roman', 9)
+        canvas_obj.setFillColor(colors.HexColor('#666666'))
+        page_text = f"Page {doc.page}"
+        canvas_obj.drawCentredString(width/2, 0.5*inch, page_text)
+        
+        # Footer line
+        canvas_obj.setStrokeColor(colors.HexColor('#cccccc'))
+        canvas_obj.setLineWidth(0.5)
+        canvas_obj.line(0.75*inch, 0.65*inch, width - 0.75*inch, 0.65*inch)
+        
+        canvas_obj.restoreState()
     
     @staticmethod
     def generate_document_pdf(
@@ -22,7 +55,7 @@ class PDFGeneratorService:
         user_name: str = "Citizen"
     ) -> BytesIO:
         """
-        Generate a professional PDF from document content
+        Generate a professional PDF from document content with official government-style formatting
         
         Args:
             document_type: Type of document (RTI, Complaint, etc.)
@@ -40,14 +73,21 @@ class PDFGeneratorService:
             pagesize=A4,
             rightMargin=1*inch,
             leftMargin=1*inch,
-            topMargin=0.75*inch,
-            bottomMargin=0.75*inch,
+            topMargin=1*inch,
+            bottomMargin=1*inch,
+        )
+        
+        # Add header/footer to each page
+        doc.build = lambda story: SimpleDocTemplate.build(
+            doc, story, 
+            onFirstPage=PDFGeneratorService._add_header_footer,
+            onLaterPages=PDFGeneratorService._add_header_footer
         )
         
         # Container for PDF elements
         elements = []
         
-        # Define professional styles
+        # Define professional styles using Times-Roman for more formal appearance
         styles = getSampleStyleSheet()
         
         # Document title style
@@ -55,48 +95,48 @@ class PDFGeneratorService:
             'DocumentTitle',
             parent=styles['Heading1'],
             fontSize=14,
-            textColor=colors.HexColor('#1a1a1a'),
+            textColor=colors.HexColor('#000000'),
             spaceAfter=0.3*inch,
             alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
+            fontName='Times-Bold',
             leading=18
         )
         
-        # Address style (To, From)
+        # Address style (To, From) - Official format
         address_style = ParagraphStyle(
             'Address',
             parent=styles['Normal'],
-            fontSize=11,
+            fontSize=12,
             textColor=colors.HexColor('#000000'),
             spaceAfter=6,
             alignment=TA_LEFT,
-            fontName='Helvetica',
-            leading=14
+            fontName='Times-Roman',
+            leading=15
         )
         
-        # Subject line style
+        # Subject line style - Bold and underlined for emphasis
         subject_style = ParagraphStyle(
             'Subject',
             parent=styles['Normal'],
-            fontSize=11,
+            fontSize=12,
             textColor=colors.HexColor('#000000'),
-            spaceAfter=12,
-            spaceBefore=12,
+            spaceAfter=14,
+            spaceBefore=14,
             alignment=TA_LEFT,
-            fontName='Helvetica-Bold',
-            leading=14
+            fontName='Times-Bold',
+            leading=15
         )
         
-        # Body paragraph style
+        # Body paragraph style - Justified for formal appearance
         body_style = ParagraphStyle(
             'BodyText',
             parent=styles['Normal'],
-            fontSize=11,
+            fontSize=12,
             textColor=colors.HexColor('#000000'),
-            spaceAfter=10,
+            spaceAfter=12,
             alignment=TA_JUSTIFY,
-            fontName='Helvetica',
-            leading=16,
+            fontName='Times-Roman',
+            leading=18,
             firstLineIndent=0
         )
         
@@ -104,34 +144,34 @@ class PDFGeneratorService:
         salutation_style = ParagraphStyle(
             'Salutation',
             parent=styles['Normal'],
-            fontSize=11,
+            fontSize=12,
             textColor=colors.HexColor('#000000'),
-            spaceAfter=12,
+            spaceAfter=14,
             alignment=TA_LEFT,
-            fontName='Helvetica',
-            leading=14
+            fontName='Times-Roman',
+            leading=15
         )
         
         # Signature block style
         signature_style = ParagraphStyle(
             'Signature',
             parent=styles['Normal'],
-            fontSize=11,
+            fontSize=12,
             textColor=colors.HexColor('#000000'),
-            spaceAfter=6,
+            spaceAfter=7,
             alignment=TA_LEFT,
-            fontName='Helvetica',
-            leading=14
+            fontName='Times-Roman',
+            leading=15
         )
         
-        # Date style (top right)
+        # Date style (top right) - Official format
         date_style = ParagraphStyle(
             'DateStyle',
             parent=styles['Normal'],
-            fontSize=10,
-            textColor=colors.HexColor('#333333'),
+            fontSize=11,
+            textColor=colors.HexColor('#000000'),
             alignment=TA_RIGHT,
-            fontName='Helvetica'
+            fontName='Times-Roman'
         )
         
         # Add date at top right
