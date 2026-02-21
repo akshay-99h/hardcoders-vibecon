@@ -309,10 +309,10 @@ async def create_mission(request: Request, authorization: Optional[str] = Header
     
     await db.missions.insert_one(mission_doc)
     
-    # Remove _id from response
+    # Remove _id from response and serialize datetime objects
     mission_doc.pop("_id", None)
     
-    return mission_doc
+    return serialize_doc(mission_doc)
 
 @app.get("/api/missions")
 async def get_missions(authorization: Optional[str] = Header(None), request: Request = None):
@@ -324,7 +324,7 @@ async def get_missions(authorization: Optional[str] = Header(None), request: Req
         {"user_id": user["user_id"]},
         {"_id": 0}
     ).sort("created_at", -1):
-        missions.append(mission_doc)
+        missions.append(serialize_doc(mission_doc))
     
     return missions
 
