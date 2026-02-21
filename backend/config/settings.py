@@ -10,13 +10,23 @@ class Settings:
     ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
     
     # Model configuration
-    PRIMARY_MODEL = "claude-sonnet-4-5-20250929"
-    PRIMARY_PROVIDER = "anthropic"
+    PRIMARY_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4-5-20250929")
+    PRIMARY_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
     
     # Voice configuration
-    STT_MODEL = "whisper-1"
-    TTS_MODEL = "tts-1-hd"  # Higher quality model for more natural voice
-    TTS_VOICE = "shimmer"  # Natural, warm female voice
+    STT_MODEL = os.getenv("STT_MODEL", "whisper-1")
+    TTS_MODEL = os.getenv("TTS_MODEL", "tts-1-hd")
+    TTS_VOICE = os.getenv("TTS_VOICE", "shimmer")
+
+    # Billing / Stripe (test mode friendly)
+    STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+    STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    STRIPE_PRICE_PLUS_MONTHLY = os.getenv("STRIPE_PRICE_PLUS_MONTHLY", "")
+    STRIPE_PRICE_PRO_MONTHLY = os.getenv("STRIPE_PRICE_PRO_MONTHLY", "")
+    STRIPE_PRICE_BUSINESS_MONTHLY = os.getenv("STRIPE_PRICE_BUSINESS_MONTHLY", "")
+    STRIPE_CHECKOUT_SUCCESS_URL = os.getenv("STRIPE_CHECKOUT_SUCCESS_URL", "http://localhost:3000/billing?checkout=success")
+    STRIPE_CHECKOUT_CANCEL_URL = os.getenv("STRIPE_CHECKOUT_CANCEL_URL", "http://localhost:3000/billing?checkout=cancel")
+    STRIPE_BILLING_RETURN_URL = os.getenv("STRIPE_BILLING_RETURN_URL", "http://localhost:3000/billing")
     
     # Session configuration
     SESSION_EXPIRY_DAYS = 7

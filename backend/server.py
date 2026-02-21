@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import os
 import uuid
 import base64
@@ -21,6 +21,7 @@ from services.context_service import ContextService
 from services.vision_service import VisionService
 from services.ai_call_service import ai_call_service
 from services.pdf_generator import PDFGeneratorService
+from services.billing_service import BillingService
 
 # Helper function to serialize datetime objects
 def serialize_doc(doc):
@@ -61,6 +62,7 @@ voice_service = VoiceService()
 chat_agent = ChatAgent()
 context_service = ContextService()
 vision_service = VisionService()
+billing_service = BillingService(db)
 
 # Load context files on startup
 @app.on_event("startup")
@@ -81,6 +83,44 @@ class ChatResponse(BaseModel):
     contextUsed: bool
     model: str
     tokensUsed: Optional[int] = None
+
+
+class CheckoutRequest(BaseModel):
+    plan_key: str
+
+
+class RoleUpdateRequest(BaseModel):
+    role: str
+
+
+class ManualSubscriptionUpdateRequest(BaseModel):
+    plan_key: str
+    subscription_status: str = "active"
+
+
+def _is_admin(user: Dict[str, Any]) -> bool:
+    return user.get("role") in {"admin", "superadmin"}
+
+
+def _require_admin(user: Dict[str, Any]):
+    if not _is_admin(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
+async def _enforce_feature_limit(user_id: str, metric: str, units: int = 1):
+    allowed, details = await billing_service.check_and_consume(user_id=user_id, metric=metric, units=units, consume=True)
+    if not allowed:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "code": "PLAN_LIMIT_EXCEEDED",
+                "feature_key": metric,
+                "current_usage": details.get("used", 0),
+                "limit": details.get("limit", 0),
+                "plan_key": details.get("plan_key", "free"),
+                "upgrade_url": "/billing",
+            },
+        )
 
 # ============== AUTH ENDPOINTS ==============
 
@@ -121,6 +161,13 @@ async def get_current_user(authorization: Optional[str] = Header(None), request:
     
     if not user_doc:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if not user_doc.get("role"):
+        user_doc["role"] = "user"
+        await db.users.update_one(
+            {"user_id": user_doc["user_id"]},
+            {"$set": {"role": "user", "updated_at": datetime.now(timezone.utc)}}
+        )
     
     return serialize_doc(user_doc)
 
@@ -151,13 +198,16 @@ async def create_session(request: Request):
     
     if existing_user:
         user_id = existing_user["user_id"]
+        update_fields = {
+            "name": data["name"],
+            "picture": data.get("picture"),
+            "updated_at": datetime.now(timezone.utc)
+        }
+        if not existing_user.get("role"):
+            update_fields["role"] = "user"
         await db.users.update_one(
             {"user_id": user_id},
-            {"$set": {
-                "name": data["name"],
-                "picture": data.get("picture"),
-                "updated_at": datetime.now(timezone.utc)
-            }}
+            {"$set": update_fields}
         )
     else:
         user_doc = {
@@ -165,6 +215,7 @@ async def create_session(request: Request):
             "email": data["email"],
             "name": data["name"],
             "picture": data.get("picture"),
+            "role": "user",
             "created_at": datetime.now(timezone.utc)
         }
         await db.users.insert_one(user_doc)
@@ -183,6 +234,8 @@ async def create_session(request: Request):
     
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     user_data = serialize_doc(user_doc)
+
+    await billing_service.ensure_customer(user_data)
     
     response = JSONResponse(content=user_data)
     response.set_cookie(
@@ -215,12 +268,194 @@ async def logout(authorization: Optional[str] = Header(None), request: Request =
     
     return response
 
+
+# ============== BILLING ENDPOINTS ==============
+
+@app.get("/api/billing/plans")
+async def get_billing_plans():
+    """Public plan catalog used by pricing UI"""
+    return {
+        "plans": billing_service.plan_catalog(),
+        "currency": "INR",
+        "interval": "month"
+    }
+
+
+@app.get("/api/billing/status")
+async def get_billing_status(authorization: Optional[str] = Header(None), request: Request = None):
+    """Current subscription and usage counters for logged-in user"""
+    user = await get_current_user(authorization, request)
+    await billing_service.ensure_customer(user)
+    usage = await billing_service.get_usage_snapshot(user["user_id"])
+    return {
+        "user_id": user["user_id"],
+        "role": user.get("role", "user"),
+        "plan_key": usage["plan_key"],
+        "subscription_status": usage["subscription_status"],
+        "current_period_start": usage["current_period_start"],
+        "current_period_end": usage["current_period_end"],
+        "metrics": usage["metrics"],
+    }
+
+
+@app.post("/api/billing/checkout-session")
+async def create_checkout_session(
+    payload: CheckoutRequest,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Create Stripe test-mode checkout session"""
+    user = await get_current_user(authorization, request)
+    try:
+        session = await billing_service.create_checkout_session(user=user, plan_key=payload.plan_key)
+        return session
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/billing/customer-portal")
+async def create_customer_portal_session(
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Create Stripe billing portal session"""
+    user = await get_current_user(authorization, request)
+    try:
+        portal = await billing_service.create_billing_portal_session(user=user)
+        return portal
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/billing/webhook")
+async def stripe_webhook(request: Request):
+    """Stripe webhook receiver (test mode + production compatible)"""
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature")
+
+    try:
+        result = await billing_service.handle_webhook(payload=payload, signature=signature)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+# ============== ADMIN ENDPOINTS ==============
+
+@app.get("/api/admin/billing/overview")
+async def admin_billing_overview(authorization: Optional[str] = Header(None), request: Request = None):
+    user = await get_current_user(authorization, request)
+    _require_admin(user)
+    return await billing_service.admin_billing_overview()
+
+
+@app.get("/api/admin/users")
+async def admin_list_users(
+    limit: int = Query(default=50, ge=1, le=200),
+    skip: int = Query(default=0, ge=0),
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    user = await get_current_user(authorization, request)
+    _require_admin(user)
+
+    results = []
+    async for item in db.users.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit):
+        profile = await db.billing_profiles.find_one({"user_id": item["user_id"]}, {"_id": 0, "plan_key": 1, "subscription_status": 1})
+        item["role"] = item.get("role", "user")
+        item["plan_key"] = profile.get("plan_key", "free") if profile else "free"
+        item["subscription_status"] = profile.get("subscription_status", "inactive") if profile else "inactive"
+        results.append(serialize_doc(item))
+
+    total = await db.users.count_documents({})
+    return {"users": results, "total": total, "limit": limit, "skip": skip}
+
+
+@app.put("/api/admin/users/{user_id}/role")
+async def admin_update_user_role(
+    user_id: str,
+    payload: RoleUpdateRequest,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    actor = await get_current_user(authorization, request)
+    _require_admin(actor)
+
+    if payload.role not in {"user", "admin", "superadmin"}:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"role": payload.role, "updated_at": datetime.now(timezone.utc)}}
+    )
+    await db.admin_audit_logs.insert_one(
+        {
+            "actor_user_id": actor["user_id"],
+            "target_user_id": user_id,
+            "action": "update_role",
+            "role": payload.role,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    return {"success": True, "user_id": user_id, "role": payload.role}
+
+
+@app.put("/api/admin/users/{user_id}/subscription")
+async def admin_update_user_subscription(
+    user_id: str,
+    payload: ManualSubscriptionUpdateRequest,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    actor = await get_current_user(authorization, request)
+    _require_admin(actor)
+
+    if payload.plan_key not in {"free", "plus", "pro", "business"}:
+        raise HTTPException(status_code=400, detail="Invalid plan key")
+
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await billing_service.ensure_customer(target)
+    await db.billing_profiles.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "plan_key": payload.plan_key,
+                "subscription_status": payload.subscription_status,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        },
+    )
+    await db.admin_audit_logs.insert_one(
+        {
+            "actor_user_id": actor["user_id"],
+            "target_user_id": user_id,
+            "action": "update_subscription",
+            "plan_key": payload.plan_key,
+            "subscription_status": payload.subscription_status,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+
+    return {"success": True, "user_id": user_id, "plan_key": payload.plan_key, "subscription_status": payload.subscription_status}
+
 # ============== CHAT ENDPOINTS ==============
 
 @app.post("/api/chat")
 async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(None), request: Request = None):
     """Send message to chat agent"""
     user = await get_current_user(authorization, request)
+    await _enforce_feature_limit(user["user_id"], "chat_messages", units=1)
     
     # Get or create conversation
     conversation_id = chat_message.conversationId
@@ -386,9 +621,12 @@ async def delete_conversation(
 async def transcribe_audio(
     audio: UploadFile = File(...),
     language: str = "en",
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
+    request: Request = None
 ):
     """Transcribe audio to text"""
+    user = await get_current_user(authorization, request)
+    await _enforce_feature_limit(user["user_id"], "stt_requests", units=1)
     try:
         audio_content = await audio.read()
         temp_path = f"/tmp/{uuid.uuid4().hex}.mp3"
@@ -434,6 +672,7 @@ async def analyze_document(
 ):
     """Analyze a legal document image using OCR and AI"""
     user = await get_current_user(authorization, request)
+    await _enforce_feature_limit(user["user_id"], "document_analysis", units=1)
     
     # Check file type
     allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"]
@@ -674,6 +913,7 @@ async def process_call_turn(
 ):
     """Process one turn of AI call conversation"""
     user = await get_current_user(authorization, request)
+    await _enforce_feature_limit(user["user_id"], "stt_requests", units=1)
     
     if not call_id:
         raise HTTPException(status_code=400, detail="call_id required")
@@ -796,7 +1036,8 @@ class PDFGenerationRequest(BaseModel):
 @app.post("/api/generate-pdf")
 async def generate_pdf(
     request: PDFGenerationRequest,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
+    http_request: Request = None
 ):
     """
     Generate PDF from document content
@@ -811,6 +1052,9 @@ async def generate_pdf(
     Returns: PDF file as download
     """
     try:
+        user = await get_current_user(authorization, http_request)
+        await _enforce_feature_limit(user["user_id"], "pdf_exports", units=1)
+
         # Generate PDF
         pdf_buffer = PDFGeneratorService.generate_document_pdf(
             document_type=request.document_type,
