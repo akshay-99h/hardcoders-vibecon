@@ -534,6 +534,30 @@ async def extract_text_from_document(
         print(f"OCR error: {e}")
         raise HTTPException(status_code=500, detail="Failed to extract text")
 
+@app.get("/api/documents/history")
+async def get_document_history(
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Get user's document analysis history"""
+    user = await get_current_user(authorization, request)
+    
+    try:
+        documents = []
+        async for doc in db.documents.find(
+            {"user_id": user["user_id"]},
+            {"_id": 0}
+        ).sort("analyzed_at", -1).limit(50):
+            documents.append(serialize_doc(doc))
+        
+        return {
+            "success": True,
+            "documents": documents
+        }
+    except Exception as e:
+        print(f"Error fetching document history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch document history")
+
 # ============== HEALTH CHECK ==============
 
 @app.get("/api/health")
