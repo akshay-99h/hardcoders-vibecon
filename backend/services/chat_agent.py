@@ -1,8 +1,11 @@
-from agents.base_agent import BaseAgent
-from services.privacy_guard import PrivacyGuard
-from models.schemas import MissionDomain, UrgencyLevel
+"""
+Chat Agent for RakshaAI
+Handles user queries with context-aware responses
+"""
 from typing import Dict, Any
-import json
+from services.llm_service import LLMService
+from services.privacy_guard import PrivacyGuard
+
 
 class ChatAgent:
     """Agent to convert user input (text/voice) into helpful guidance"""
