@@ -1,0 +1,20 @@
+{
+  "category": "privacy_safety",
+  "description": "Data protection, scam prevention, cybercrime, and digital safety guidelines",
+  "keywords": ["scam", "fraud", "phishing", "otp", "privacy", "data protection", "cybercrime", "identity theft", "spam", "harassment", "stalking", "deepfake", "hacking", "password", "data breach"],
+  "portals": {
+    "cybercrime": {"url": "https://cybercrime.gov.in", "helpline": "1930", "purpose": "Report all cybercrimes including financial fraud"},
+    "cert_in": {"url": "https://cert-in.org.in", "purpose": "Indian Computer Emergency Response Team"},
+    "chakshu": {"url": "https://sancharsaathi.gov.in", "purpose": "Report spam calls/SMS and suspected fraud communications"}
+  },
+  "never_share": [
+    "Aadhaar number or Aadhaar OTP",
+    "PAN number",
+    "Bank account number or IFSC",
+    "Credit/debit card number, CVV, expiry date",
+    "UPI PIN or UPI ID password",
+    "Net banking credentials",
+    "OTP received on phone (no legitimate entity asks for OTP)",
+    "Passwords of any kind"
+  ]
+}

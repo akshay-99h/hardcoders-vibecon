@@ -1,0 +1,11 @@
+{
+  "category": "legal_rights",
+  "description": "Civil, criminal, family, property, labor, and consumer legal rights in India",
+  "keywords": ["property", "land", "tenant", "rent", "divorce", "custody", "maintenance", "FIR", "bail", "arrest", "cheating", "fraud", "defamation", "consumer complaint", "labor", "wages", "termination"],
+  "portals": {
+    "ecourts": {"url": "https://ecourts.gov.in", "purpose": "Case status, court orders, cause lists"},
+    "nalsa": {"url": "https://nalsa.gov.in", "purpose": "Free legal aid for eligible persons", "helpline": "15100"},
+    "ncw": {"url": "https://ncw.nic.in", "purpose": "National Commission for Women", "helpline": "7827-170-170"},
+    "cybercrime": {"url": "https://cybercrime.gov.in", "purpose": "Report cybercrimes online", "helpline": "1930"}
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "category": "grievance_redressal",
+  "description": "How to file complaints, seek redressal, and escalate issues with government and private entities",
+  "keywords": ["complaint", "grievance", "RTI", "ombudsman", "consumer forum", "court", "PIL", "lokpal", "lokayukta", "CPGRAMS", "escalate", "appeal", "tribunal", "arbitration", "mediation", "lok adalat"],
+  "portals": {
+    "cpgrams": {"url": "https://pgportal.gov.in", "purpose": "Centralized Public Grievance Redress and Monitoring System — complaints against central government"},
+    "rti": {"url": "https://rtionline.gov.in", "purpose": "File RTI applications to central government ministries", "fee": "Rs. 10"},
+    "consumer": {"url": "https://edaakhil.nic.in", "purpose": "Online filing of consumer complaints"},
+    "lokpal": {"url": "https://lokpal.gov.in", "purpose": "Complaints against public servants for corruption"},
+    "nhrc": {"url": "https://nhrc.nic.in", "purpose": "National Human Rights Commission", "helpline": "14433"},
+    "ncsc": {"url": "https://ncsc.nic.in", "purpose": "National Commission for Scheduled Castes"},
+    "ncst": {"url": "https://ncst.nic.in", "purpose": "National Commission for Scheduled Tribes"},
+    "ncbc": {"url": "https://ncbc.nic.in", "purpose": "National Commission for Backward Classes"},
+    "ncpcr": {"url": "https://ncpcr.gov.in", "purpose": "National Commission for Protection of Child Rights", "helpline": "1098"}
+  },
+  "mechanisms": {
+    "rti": {
+      "what": "Right to Information — get information from any public authority",
+      "key_law": "RTI Act 2005",
+      "how": [
+        "File application at rtionline.gov.in (central) or state RTI portal",
+        "Pay Rs. 10 fee (BPL exempt)",
+        "Response due within 30 days",
+        "If denied or no response → First Appeal to senior officer within 30 days",
+        "If still unsatisfied → Second Appeal to Information Commission within 90 days"
+      ],
+      "tips": "Be specific in your question. Ask for documents/records, not opinions. One subject per application."
+    },
+    "consumer_forum": {
+      "what": "Three-tier quasi-judicial body for consumer disputes",
+      "key_law": "Consumer Protection Act 2019",
+      "jurisdiction": {
+        "district": "Up to Rs. 1 crore",
+        "state": "Rs. 1 crore to Rs. 10 crore",
+        "national": "Above Rs. 10 crore"
+      },
+      "how": [
+        "File complaint online at edaakhil.nic.in",
+        "No lawyer required (but recommended for complex cases)",
+        "Attach proof: bills, receipts, correspondence, photos",
+        "Hearing within 21 days of admission",
+        "Appeal within 45 days of order"
+      ],
+      "fee": "Rs. 200 to Rs. 5,000 depending on claim amount"
+    }
+  }
+}

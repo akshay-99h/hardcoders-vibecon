@@ -1,0 +1,14 @@
+{
+  "category": "financial_services",
+  "description": "Tax, banking, insurance, provident fund, pension, and financial regulatory matters",
+  "keywords": ["income tax", "GST", "TDS", "refund", "ITR", "bank", "loan", "EMI", "insurance", "claim", "EPF", "PF", "pension", "NPS", "mutual fund", "SEBI", "RBI", "UPI", "fraud", "credit score", "CIBIL"],
+  "portals": {
+    "income_tax": {"url": "https://incometax.gov.in", "helpline": "1800-180-1961"},
+    "gst": {"url": "https://gst.gov.in", "helpline": "1800-103-4786"},
+    "epf": {"url": "https://epfindia.gov.in", "helpline": "1800-118-005"},
+    "nps": {"url": "https://npscra.nsdl.co.in", "helpline": "1800-222-080"},
+    "rbi": {"url": "https://rbi.org.in", "ombudsman": "https://cms.rbi.org.in"},
+    "sebi": {"url": "https://sebi.gov.in", "scores": "https://scores.sebi.gov.in"},
+    "irdai": {"url": "https://irdai.gov.in", "igms": "https://igms.irda.gov.in", "helpline": "155255"}
+  }
+}
