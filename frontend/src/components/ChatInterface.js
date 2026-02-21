@@ -12,6 +12,7 @@ import api from '../utils/api';
 function ChatInterface() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [billingStatus, setBillingStatus] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -20,7 +21,8 @@ function ChatInterface() {
   const [isAuthenticating, setIsAuthenticating] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [isDark, setIsDark] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [selectedLanguage, setSelectedLanguage] = useState('en'); // Language for STT
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -63,6 +65,17 @@ function ChatInterface() {
   }, [isDark]);
 
   useEffect(() => {
+    const onResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      setSidebarOpen((prev) => (mobile ? prev : true));
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
@@ -92,6 +105,7 @@ function ChatInterface() {
           
           // Fetch conversations after successful auth
           await fetchConversations();
+          await fetchBillingStatus();
           setIsAuthenticating(false);
           console.log('Authentication successful');
           return;
@@ -113,7 +127,7 @@ function ChatInterface() {
     try {
       const response = await api.get('/api/auth/me');
       setUser(response.data);
-      await fetchConversations();
+      await Promise.all([fetchConversations(), fetchBillingStatus()]);
     } catch (error) {
       console.error('Auth check failed:', error);
       navigate('/');
@@ -134,8 +148,18 @@ function ChatInterface() {
       const response = await api.get(`/api/conversations/${conversationId}`);
       setMessages(response.data.messages);
       setCurrentConversation(conversationId);
+      if (isMobile) setSidebarOpen(false);
     } catch (error) {
       console.error('Failed to load conversation:', error);
+    }
+  };
+
+  const fetchBillingStatus = async () => {
+    try {
+      const response = await api.get('/api/billing/status');
+      setBillingStatus(response.data);
+    } catch (error) {
+      console.error('Failed to fetch billing status:', error);
     }
   };
 
@@ -145,6 +169,53 @@ function ChatInterface() {
 
   const toggleTheme = () => {
     setIsDark(!isDark);
+  };
+
+  const toolCards = [
+    {
+      id: 'track',
+      title: 'Track Application',
+      description: 'Passport, Aadhaar, PAN and more',
+      prompt: 'Help me track my government application status step by step.',
+    },
+    {
+      id: 'notice',
+      title: 'Analyze Notice',
+      description: 'Understand legal/government notices',
+      prompt: 'Help me analyze a government notice and explain the next steps.',
+    },
+    {
+      id: 'draft',
+      title: 'Draft Complaint/RTI',
+      description: 'Generate structured letters fast',
+      prompt: 'Help me draft an RTI or complaint with the required details checklist.',
+    },
+    {
+      id: 'deadline',
+      title: 'Deadline Autopilot',
+      description: 'Auto-followups and reminders',
+      prompt: 'Set up a deadline tracker and follow-up plan for my government task.',
+      metric: 'automation_runs',
+    },
+    {
+      id: 'fraud',
+      title: 'Fraud URL Check',
+      description: 'Detect fake portals before login',
+      prompt: 'Check if this government website URL is safe and official.',
+    },
+    {
+      id: 'guided',
+      title: 'Guided Portal Assist',
+      description: 'Step-by-step with human interventions',
+      prompt: 'Guide me through a portal workflow and pause whenever manual action is needed.',
+      metric: 'automation_runs',
+    },
+  ];
+
+  const isToolLocked = (tool) => {
+    if (!tool.metric) return false;
+    const limit = billingStatus?.metrics?.[tool.metric]?.limit ?? 0;
+    return limit <= 0;
   };
 
   const handleStartRecording = async () => {
@@ -540,16 +611,17 @@ function ChatInterface() {
     }
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (messageOverride = null) => {
     // If file is selected, do document analysis instead
     if (selectedFile) {
       await handleDocumentAnalysis();
       return;
     }
     
-    if (!inputMessage.trim()) return;
+    const messageToSend = (messageOverride ?? inputMessage).trim();
+    if (!messageToSend) return;
 
-    const userMessage = inputMessage.trim();
+    const userMessage = messageToSend;
     
     // Optimistically add user message
     setMessages(prev => [...prev, {
@@ -593,6 +665,7 @@ function ChatInterface() {
   const handleNewChat = () => {
     setCurrentConversation(null);
     setMessages([]);
+    if (isMobile) setSidebarOpen(false);
   };
 
   const handleDeleteConversation = async (conversationId, e) => {
@@ -622,6 +695,14 @@ function ChatInterface() {
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  const handleToolClick = async (tool) => {
+    if (isToolLocked(tool)) {
+      navigate('/billing');
+      return;
+    }
+    await handleSendMessage(tool.prompt);
   };
 
   const handleFileSelect = (e) => {
@@ -1000,9 +1081,25 @@ function ChatInterface() {
   }
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden">
+    <div className="h-screen bg-background flex overflow-hidden relative">
+      {/* Mobile backdrop */}
+      {isMobile && sidebarOpen && (
+        <button
+          className="absolute inset-0 bg-black/30 z-30"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close sidebar"
+        />
+      )}
+
       {/* Sidebar */}
-      <div className={`bg-card border-r border-border flex flex-col transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden h-full`}>
+      <div
+        className={`bg-card border-r border-border flex flex-col transition-all duration-300 h-full
+        ${
+          isMobile
+            ? `fixed inset-y-0 left-0 z-40 w-72 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+            : `${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden`
+        }`}
+      >
         {/* Sidebar Header */}
         <div className="p-4 border-b border-border flex-shrink-0">
           <button
@@ -1063,11 +1160,25 @@ function ChatInterface() {
             <Logout01Icon size={16} />
             <span>Logout</span>
           </button>
+          <button
+            onClick={() => navigate('/billing')}
+            className="w-full mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
+          >
+            Billing & Usage
+          </button>
+          {(user?.role === 'admin' || user?.role === 'superadmin') && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="w-full mt-1 text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
+            >
+              Admin Console
+            </button>
+          )}
         </div>
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col h-full min-w-0">
+      <div className="flex-1 flex flex-col h-full min-w-0 relative z-10">
         {/* Chat Header */}
         <header className="bg-card border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -1110,12 +1221,36 @@ function ChatInterface() {
         <div className="flex-1 overflow-y-auto p-4 min-h-0">
           <div className="max-w-4xl mx-auto space-y-4">
             {messages.length === 0 && (
-              <div className="text-center py-12">
+              <div className="text-center py-10">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <MessageMultiple01Icon size={32} className="text-primary" />
                 </div>
                 <h2 className="text-xl font-bold text-foreground mb-2">Start a conversation</h2>
                 <p className="text-muted-foreground">Ask me anything about government services</p>
+                <div className="mt-6 w-full max-w-4xl mx-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-left">
+                    {toolCards.map((tool) => {
+                      const locked = isToolLocked(tool);
+                      return (
+                        <button
+                          key={tool.id}
+                          onClick={() => handleToolClick(tool)}
+                          className={`p-4 rounded-xl border transition-all ${
+                            locked
+                              ? 'border-border bg-muted/50 opacity-90'
+                              : 'border-border bg-card hover:border-primary/40 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold text-foreground">{tool.title}</p>
+                            {locked && <span className="text-xs text-muted-foreground">Upgrade</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">{tool.description}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1319,25 +1454,35 @@ function ChatInterface() {
                   className="hidden"
                 />
                 
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
-                  title="Upload document (legal notice, certificate, etc.)"
-                >
-                  <AttachmentIcon size={20} />
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                    title="Upload document (legal notice, certificate, etc.)"
+                  >
+                    <AttachmentIcon size={20} />
+                  </button>
 
-                <button
-                  onClick={isRecording ? handleStopRecording : handleStartRecording}
-                  className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
-                    isRecording
-                      ? 'bg-destructive text-destructive-foreground animate-pulse'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                  }`}
-                  title="Voice to text"
-                >
-                  <Mic01Icon size={20} />
-                </button>
+                  <button
+                    onClick={isRecording ? handleStopRecording : handleStartRecording}
+                    className={`p-3 transition-colors rounded-lg ${
+                      isRecording
+                        ? 'bg-destructive text-destructive-foreground animate-pulse'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
+                    title="Voice to text"
+                  >
+                    <Mic01Icon size={20} />
+                  </button>
+
+                  <button
+                    onClick={startVoiceConversation}
+                    className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                    title="Start AI voice conversation"
+                  >
+                    <Call02Icon size={20} />
+                  </button>
+                </div>
 
                 <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
                   <textarea
@@ -1362,15 +1507,6 @@ function ChatInterface() {
                   ) : (
                     <ArrowRight01Icon size={20} />
                   )}
-                </button>
-                
-                {/* ChatGPT-style inline voice conversation button */}
-                <button
-                  onClick={startVoiceConversation}
-                  className="p-3 bg-gradient-to-br from-purple-500 to-blue-500 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all flex-shrink-0"
-                  title="Start AI voice conversation"
-                >
-                  <Call02Icon size={20} />
                 </button>
               </div>
             )}
