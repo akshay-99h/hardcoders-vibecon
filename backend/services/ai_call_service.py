@@ -72,13 +72,25 @@ class AICallService:
         import tempfile
         import os
         
+        print(f"Processing audio turn for call {call_id}, audio size: {len(audio_data)} bytes")
+        
+        # Save audio to temp file
         temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".webm")
         temp_audio.write(audio_data)
         temp_audio.close()
         
+        print(f"Saved audio to temp file: {temp_audio.name}")
+        
         try:
             with open(temp_audio.name, "rb") as audio_file:
+                print(f"Transcribing audio with language: {language}")
                 transcribed_text = await self.voice_service.transcribe_audio(audio_file, language)
+                print(f"Transcribed text: {transcribed_text}")
+        except Exception as e:
+            print(f"Transcription error: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         finally:
             os.unlink(temp_audio.name)
         
