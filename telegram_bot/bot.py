@@ -221,6 +221,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_message = update.message.text
     
+    logger.info(f"📨 handle_message called for chat_id={chat_id}, message='{user_message}'")
+    logger.info(f"🔍 Current user_data state: {context.user_data}")
+    
     # Get or create user
     await get_or_create_user(chat_id, user.username or "", user.first_name)
     
@@ -268,6 +271,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send "typing" indicator
         await update.message.chat.send_action("typing")
         
+        logger.info(f"🤖 Calling chat agent for chat_id={chat_id}")
+        
         # Get response from chat agent
         result = await chat_agent.process({
             "user_input": user_message,
@@ -277,8 +282,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         response = result.get("message", "Sorry, I couldn't process that.")
         
+        logger.info(f"✅ Got response from chat agent, checking if document...")
+        
         # Check if this is a generated document
         if is_generated_document(response):
+            logger.info(f"📄 Document detected! Storing context and asking for reminder")
+            
             # Store document context for reminder flow
             user_document_context[chat_id] = {
                 "document_type": detect_document_type(response),
@@ -301,17 +310,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='Markdown'
             )
             
+            logger.info(f"🔄 Returning ASKING_REMINDER state for chat_id={chat_id}")
             return ASKING_REMINDER
         else:
             # Regular response
+            logger.info(f"💬 Regular message, sending response")
             await update.message.reply_text(response)
             
     except Exception as e:
-        logger.error(f"Error processing message: {e}")
+        logger.error(f"❌ Error processing message for chat_id={chat_id}: {e}", exc_info=True)
         await update.message.reply_text(
             "Sorry, I encountered an error. Please try again."
         )
     
+    logger.info(f"🏁 Returning ConversationHandler.END for chat_id={chat_id}")
     return ConversationHandler.END
 
 
