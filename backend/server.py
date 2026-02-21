@@ -637,6 +637,132 @@ async def root():
     """Root endpoint"""
     return {"message": "Mission-Mode Platform API", "version": "1.0.0"}
 
+# ============== CALL ENDPOINTS ==============
+
+@app.post("/api/calls/token")
+async def create_call_token(
+    request: Request,
+    authorization: Optional[str] = Header(None)
+):
+    """Generate short-lived token for WebRTC call"""
+    user = await get_current_user(authorization, request)
+    
+    body = await request.json()
+    room_id = body.get("room_id")
+    
+    if not room_id:
+        raise HTTPException(status_code=400, detail="room_id required")
+    
+    # Generate call token
+    token = call_service.generate_call_token(user["user_id"], room_id)
+    
+    # Get ICE server configuration
+    ice_servers = call_service.get_ice_servers()
+    
+    return {
+        "token": token,
+        "room_id": room_id,
+        "ice_servers": ice_servers,
+        "expires_in": call_service.token_ttl
+    }
+
+
+@app.get("/api/calls/{room_id}/status")
+async def get_call_status(
+    room_id: str,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Get current status of a call room"""
+    user = await get_current_user(authorization, request)
+    
+    room = call_service.get_room(room_id)
+    participant_count = manager.get_participant_count(room_id)
+    
+    if not room:
+        return {
+            "room_id": room_id,
+            "status": "not_found",
+            "participant_count": participant_count,
+            "is_full": False
+        }
+    
+    return {
+        "room_id": room_id,
+        "status": "active" if participant_count > 0 else "empty",
+        "participant_count": participant_count,
+        "is_full": room.is_full(),
+        "max_participants": room.max_participants
+    }
+
+
+@app.websocket("/ws/calls/{room_id}")
+async def websocket_call_endpoint(
+    websocket: WebSocket,
+    room_id: str,
+    token: str = Query(...)
+):
+    """WebSocket endpoint for call signaling"""
+    
+    # Verify token
+    payload = call_service.verify_call_token(token)
+    if not payload:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+        return
+    
+    user_id = payload.get("user_id")
+    token_room_id = payload.get("room_id")
+    
+    # Verify room ID matches token
+    if token_room_id != room_id:
+        await websocket.close(code=4002, reason="Room ID mismatch")
+        return
+    
+    # Get or create room
+    room = call_service.get_or_create_room(room_id)
+    
+    # Check if room is full
+    if room.is_full() and user_id not in room.participants:
+        await websocket.close(code=4003, reason="Room is full")
+        return
+    
+    # Add participant to room
+    if not room.add_participant(user_id):
+        await websocket.close(code=4003, reason="Room is full")
+        return
+    
+    # Connect to WebSocket manager
+    await manager.connect(room_id, user_id, websocket)
+    
+    print(f"User {user_id} joined call room {room_id}")
+    
+    try:
+        while True:
+            # Receive message
+            data = await websocket.receive_json()
+            
+            # Handle signaling message
+            await handle_signaling_message(room_id, user_id, data, websocket)
+    
+    except WebSocketDisconnect:
+        print(f"User {user_id} disconnected from call room {room_id}")
+    except Exception as e:
+        print(f"WebSocket error for user {user_id}: {e}")
+    finally:
+        # Cleanup
+        manager.disconnect(room_id, user_id)
+        room.remove_participant(user_id)
+        
+        # Notify others
+        await manager.broadcast_to_room(room_id, {
+            "type": "user_left",
+            "user_id": user_id
+        })
+        
+        # Cleanup empty room
+        call_service.cleanup_room(room_id)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
