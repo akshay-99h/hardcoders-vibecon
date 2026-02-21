@@ -4,12 +4,13 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import './App.css';
 
 import LandingPage from './components/LandingPage';
-import AuthCallback from './components/AuthCallback';
 import ChatInterface from './components/ChatInterface';
 import HowItWorks from './components/HowItWorks';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import AICall from './pages/AICall';
+import BillingPage from './pages/BillingPage';
+import AdminConsole from './pages/AdminConsole';
 
 function AppRouter() {
   return (
@@ -20,6 +21,8 @@ function AppRouter() {
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/chat" element={<ChatInterface />} />
       <Route path="/call" element={<AICall />} />
+      <Route path="/billing" element={<BillingPage />} />
+      <Route path="/admin" element={<AdminConsole />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

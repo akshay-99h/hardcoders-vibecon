@@ -8,10 +8,12 @@ import {
   MessageMultiple01Icon, Logout01Icon, VolumeHighIcon, Copy01Icon, Tick02Icon, Call02Icon, Download01Icon
 } from 'hugeicons-react';
 import api from '../utils/api';
+import { ACTION_HUB_COPY, ACTION_HUB_SCHEMA } from '../config/actionHubConfig';
 
 function ChatInterface() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [billingStatus, setBillingStatus] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -20,12 +22,20 @@ function ChatInterface() {
   const [isAuthenticating, setIsAuthenticating] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [isDark, setIsDark] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [selectedLanguage, setSelectedLanguage] = useState('en'); // Language for STT
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [isRoleUpdating, setIsRoleUpdating] = useState(false);
+  const [activeAction, setActiveAction] = useState(null);
+  const [actionFormValues, setActionFormValues] = useState({});
+  const [actionFormFiles, setActionFormFiles] = useState({});
+  const [actionFormError, setActionFormError] = useState('');
+  const [actionToast, setActionToast] = useState(null);
+  const [actionFileInputVersion, setActionFileInputVersion] = useState(0);
   const [isInVoiceMode, setIsInVoiceMode] = useState(false);
   const [voiceCallId, setVoiceCallId] = useState(null);
   const [voiceState, setVoiceState] = useState('idle'); // idle, listening, thinking, speaking
@@ -63,8 +73,25 @@ function ChatInterface() {
   }, [isDark]);
 
   useEffect(() => {
+    const onResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      setSidebarOpen((prev) => (mobile ? prev : true));
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (!actionToast) return undefined;
+    const timeoutId = window.setTimeout(() => setActionToast(null), 2800);
+    return () => window.clearTimeout(timeoutId);
+  }, [actionToast]);
 
   const handleAuthCallback = async () => {
     setIsAuthenticating(true);
@@ -92,6 +119,7 @@ function ChatInterface() {
           
           // Fetch conversations after successful auth
           await fetchConversations();
+          await fetchBillingStatus();
           setIsAuthenticating(false);
           console.log('Authentication successful');
           return;
@@ -113,7 +141,7 @@ function ChatInterface() {
     try {
       const response = await api.get('/api/auth/me');
       setUser(response.data);
-      await fetchConversations();
+      await Promise.all([fetchConversations(), fetchBillingStatus()]);
     } catch (error) {
       console.error('Auth check failed:', error);
       navigate('/');
@@ -134,8 +162,20 @@ function ChatInterface() {
       const response = await api.get(`/api/conversations/${conversationId}`);
       setMessages(response.data.messages);
       setCurrentConversation(conversationId);
+      if (isMobile) setSidebarOpen(false);
     } catch (error) {
       console.error('Failed to load conversation:', error);
+    }
+  };
+
+  const fetchBillingStatus = async () => {
+    try {
+      const response = await api.get('/api/billing/status');
+      setBillingStatus(response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch billing status:', error);
+      return null;
     }
   };
 
@@ -147,7 +187,296 @@ function ChatInterface() {
     setIsDark(!isDark);
   };
 
+  const toggleDemoAdminRole = async () => {
+    if (!user || isRoleUpdating) return;
+    const nextIsAdmin = user.role !== 'admin' && user.role !== 'superadmin';
+    setIsRoleUpdating(true);
+
+    try {
+      const response = await api.post('/api/auth/demo-role', { is_admin: nextIsAdmin });
+      const nextRole = response.data?.role || (nextIsAdmin ? 'admin' : 'user');
+      setUser((prev) => (prev ? { ...prev, role: nextRole } : prev));
+      setBillingStatus((prev) => (prev ? { ...prev, role: nextRole } : prev));
+    } catch (error) {
+      console.error('Failed to toggle demo role:', error);
+      alert('Failed to update role');
+    } finally {
+      setIsRoleUpdating(false);
+    }
+  };
+
+  const actionModules = ACTION_HUB_SCHEMA.actions || [];
+  const actionCopyMap = ACTION_HUB_COPY.action_copy || {};
+  const commonCopy = ACTION_HUB_COPY.common_copy || {};
+  const composeConfig = ACTION_HUB_SCHEMA.prompt_compose || {};
+  const submitBehavior = ACTION_HUB_SCHEMA.submit_behavior || {};
+  const actionMetricMap = {
+    application_followup_draft: 'chat_messages',
+    notice_analyzer: 'document_analysis',
+    draft_rti_complaint: 'chat_messages',
+    deadline_planner: 'automation_runs',
+    portal_form_prep: 'chat_messages',
+    fraud_signal_analyzer: 'chat_messages',
+  };
+
+  const getActionCopy = (actionId) => actionCopyMap[actionId] || {};
+  const getActionMetric = (actionId) => actionMetricMap[actionId] || null;
+
+  const getMetricLabel = (metricKey) => {
+    return {
+      chat_messages: 'Chat prompts',
+      stt_requests: 'Voice requests',
+      document_analysis: 'Document scans',
+      pdf_exports: 'PDF exports',
+      automation_runs: 'Automation runs',
+    }[metricKey] || metricKey.replace(/_/g, ' ');
+  };
+
+  const getMetricSnapshot = (metricKey) => {
+    if (!metricKey) return null;
+    return billingStatus?.metrics?.[metricKey] || null;
+  };
+
+  const isMetricLocked = (metricKey) => {
+    const metric = getMetricSnapshot(metricKey);
+    if (!metric) return false;
+    const limit = Number(metric.limit ?? 0);
+    const remaining = Number(metric.remaining ?? 0);
+    return limit <= 0 || remaining <= 0 || Boolean(metric.exhausted);
+  };
+
+  const isActionLocked = (action) => {
+    const metricKey = getActionMetric(action.id);
+    if (!metricKey) return false;
+    return isMetricLocked(metricKey);
+  };
+
+  const getActionQuotaBadge = (action) => {
+    const metricKey = getActionMetric(action.id);
+    if (!metricKey) return null;
+    const metric = getMetricSnapshot(metricKey);
+    if (!metric) {
+      return {
+        metricLabel: getMetricLabel(metricKey),
+        label: 'Checking quota...',
+        className: 'bg-muted text-muted-foreground'
+      };
+    }
+
+    const limit = Number(metric.limit ?? 0);
+    const remaining = Number(metric.remaining ?? 0);
+    if (limit <= 0) {
+      return {
+        metricLabel: getMetricLabel(metricKey),
+        label: 'Locked on plan',
+        className: 'bg-muted text-muted-foreground'
+      };
+    }
+    if (remaining <= 0 || Boolean(metric.exhausted)) {
+      return {
+        metricLabel: getMetricLabel(metricKey),
+        label: '0 left this month',
+        className: 'bg-destructive/10 text-destructive'
+      };
+    }
+    return {
+      metricLabel: getMetricLabel(metricKey),
+      label: `${remaining} left this month`,
+      className: 'bg-primary/10 text-primary'
+    };
+  };
+
+  const resetActionDialog = () => {
+    setActiveAction(null);
+    setActionFormValues({});
+    setActionFormFiles({});
+    setActionFormError('');
+    setActionFileInputVersion((prev) => prev + 1);
+  };
+
+  const openActionDialog = (action) => {
+    if (isActionLocked(action)) {
+      navigate('/billing');
+      return;
+    }
+
+    const defaults = {};
+    (action?.dialog?.fields || []).forEach((field) => {
+      if (field.default !== undefined) {
+        defaults[field.id] = field.default;
+      }
+    });
+
+    setActiveAction(action);
+    setActionFormValues(defaults);
+    setActionFormFiles({});
+    setActionFormError('');
+    setActionFileInputVersion((prev) => prev + 1);
+  };
+
+  const closeActionDialog = () => {
+    resetActionDialog();
+  };
+
+  const updateActionFieldValue = (fieldId, value) => {
+    setActionFormValues((prev) => ({ ...prev, [fieldId]: value }));
+  };
+
+  const updateActionFieldFile = (fieldId, file) => {
+    setActionFormFiles((prev) => ({ ...prev, [fieldId]: file || null }));
+  };
+
+  const getActionFieldDefinition = (action, fieldId) => {
+    return (action?.dialog?.fields || []).find((field) => field.id === fieldId);
+  };
+
+  const getActionFieldStringValue = (action, fieldId) => {
+    const field = getActionFieldDefinition(action, fieldId);
+    if (!field) return '';
+    if (field.type === 'file') {
+      return actionFormFiles[fieldId]?.name || '';
+    }
+    const raw = actionFormValues[fieldId];
+    if (raw === undefined || raw === null) return '';
+    return String(raw).trim();
+  };
+
+  const hasActionValue = (action, fieldId) => {
+    return getActionFieldStringValue(action, fieldId).length > 0;
+  };
+
+  const validateActionForm = (action) => {
+    const requiredFields = action?.validation?.required || [];
+    const missingRequired = requiredFields.some((fieldId) => !hasActionValue(action, fieldId));
+    if (missingRequired) {
+      return commonCopy.validation_required || 'Please fill all required fields.';
+    }
+
+    const anyOfGroups = action?.validation?.any_of || [];
+    for (const group of anyOfGroups) {
+      const anyPresent = group.some((fieldId) => hasActionValue(action, fieldId));
+      if (!anyPresent) {
+        return commonCopy.validation_any_of || 'Please provide at least one of the required inputs.';
+      }
+    }
+    return '';
+  };
+
+  const composeActionPrompt = (action) => {
+    const sections = [];
+    const separator = composeConfig.section_separator || '\n';
+    const preface = ACTION_HUB_COPY.chat_preface_templates?.[action.id];
+    if (preface) {
+      sections.push(preface);
+    }
+
+    const promptSections = action?.prompt?.sections || [];
+    for (const section of promptSections) {
+      const placeholderMatches = [...section.matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)];
+      let omitLine = false;
+      let rendered = section;
+
+      for (const [, placeholderKey] of placeholderMatches) {
+        const field = getActionFieldDefinition(action, placeholderKey);
+        const value = getActionFieldStringValue(action, placeholderKey);
+        if (!value && field?.omit_if_empty) {
+          omitLine = true;
+          break;
+        }
+        rendered = rendered.replace(new RegExp(`{{\\s*${placeholderKey}\\s*}}`, 'g'), value || 'Not provided');
+      }
+
+      if (omitLine) {
+        continue;
+      }
+      if (placeholderMatches.length > 0 && rendered.trim() === 'Not provided' && section.trim().startsWith('{{')) {
+        continue;
+      }
+      sections.push(rendered);
+    }
+
+    const uploadedFiles = Object.entries(actionFormFiles).filter(([, file]) => file);
+    if (uploadedFiles.length > 0) {
+      sections.push('');
+      sections.push('Uploaded Files:');
+      uploadedFiles.forEach(([, file]) => {
+        sections.push(`- ${file.name}`);
+      });
+    }
+
+    const responseFormatItems = action?.prompt?.response_format || [];
+    if (responseFormatItems.length > 0) {
+      sections.push('');
+      sections.push(composeConfig.response_format_prefix || 'Response format:');
+      responseFormatItems.forEach((item) => {
+        sections.push(`${composeConfig.response_format_bullet_prefix || '- '}${item}`);
+      });
+    }
+
+    const prompt = sections.join(separator).replace(/\n{3,}/g, '\n\n').trim();
+    return prompt;
+  };
+
+  const submitActionDialog = async () => {
+    if (!activeAction) return;
+
+    const validationMessage = validateActionForm(activeAction);
+    if (validationMessage) {
+      setActionFormError(validationMessage);
+      return;
+    }
+
+    setActionFormError('');
+    const prompt = composeActionPrompt(activeAction);
+    let success = true;
+    if (submitBehavior.send_to_chat) {
+      success = await handleSendMessage(prompt);
+    }
+
+    if (submitBehavior.close_dialog_on_submit) {
+      closeActionDialog();
+    }
+    if (submitBehavior.reset_form_on_submit && !submitBehavior.close_dialog_on_submit) {
+      setActionFormValues({});
+      setActionFormFiles({});
+      setActionFileInputVersion((prev) => prev + 1);
+    }
+
+    setActionToast({
+      tone: success ? 'success' : 'error',
+      message: success
+        ? (commonCopy.toast_success || 'Structured query sent to chat.')
+        : (commonCopy.toast_error || 'Could not submit this workflow. Please review your inputs.'),
+    });
+  };
+
+  const extractQuotaError = (error) => {
+    const detail = error?.response?.data?.detail;
+    if (error?.response?.status !== 402 || !detail || typeof detail !== 'object') {
+      return null;
+    }
+    if (detail.code !== 'PLAN_LIMIT_EXCEEDED') {
+      return null;
+    }
+    return detail;
+  };
+
+  const handleQuotaError = async (error) => {
+    const quota = extractQuotaError(error);
+    if (!quota) return false;
+
+    const metricLabel = getMetricLabel(quota.feature_key || 'usage');
+    alert(`Limit reached for ${metricLabel}. Upgrade your plan to continue.`);
+    await fetchBillingStatus();
+    return true;
+  };
+
   const handleStartRecording = async () => {
+    if (isMetricLocked('stt_requests')) {
+      navigate('/billing');
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
@@ -188,7 +517,10 @@ function ChatInterface() {
       });
 
       setInputMessage(response.data.text);
+      await fetchBillingStatus();
     } catch (error) {
+      const handled = await handleQuotaError(error);
+      if (handled) return;
       console.error('Transcription error:', error);
     }
   };
@@ -196,6 +528,11 @@ function ChatInterface() {
   // ============== CHATGPT-STYLE VOICE CONVERSATION ==============
   
   const startVoiceConversation = async () => {
+    if (isMetricLocked('stt_requests')) {
+      navigate('/billing');
+      return;
+    }
+
     try {
       // Start AI call session
       const response = await api.post('/api/ai-call/start', {
@@ -426,6 +763,8 @@ function ChatInterface() {
         setCurrentConversation(response.data.conversation_id);
         fetchConversations();
       }
+
+      await fetchBillingStatus();
       
       // Play AI response using BROWSER TEXT-TO-SPEECH
       setVoiceState('speaking');
@@ -500,6 +839,11 @@ function ChatInterface() {
       window.speechSynthesis.speak(utterance);
       
     } catch (error) {
+      const handled = await handleQuotaError(error);
+      if (handled) {
+        endVoiceConversation();
+        return;
+      }
       console.error('Voice turn error:', error);
       alert(`Voice conversation error: ${error.response?.data?.detail || error.message}`);
       endVoiceConversation();
@@ -540,16 +884,17 @@ function ChatInterface() {
     }
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (messageOverride = null) => {
     // If file is selected, do document analysis instead
-    if (selectedFile) {
+    if (!messageOverride && selectedFile) {
       await handleDocumentAnalysis();
-      return;
+      return true;
     }
     
-    if (!inputMessage.trim()) return;
+    const messageToSend = (messageOverride ?? inputMessage).trim();
+    if (!messageToSend) return false;
 
-    const userMessage = inputMessage.trim();
+    const userMessage = messageToSend;
     
     // Optimistically add user message
     setMessages(prev => [...prev, {
@@ -581,10 +926,16 @@ function ChatInterface() {
         fetchConversations(); // Refresh sidebar
       }
 
+      await fetchBillingStatus();
+      return true;
+
     } catch (error) {
-      console.error('Chat error:', error);
       // Remove optimistic user message on error
       setMessages(prev => prev.slice(0, -1));
+      const handled = await handleQuotaError(error);
+      if (handled) return false;
+      console.error('Chat error:', error);
+      return false;
     } finally {
       setIsLoading(false);
     }
@@ -593,6 +944,7 @@ function ChatInterface() {
   const handleNewChat = () => {
     setCurrentConversation(null);
     setMessages([]);
+    if (isMobile) setSidebarOpen(false);
   };
 
   const handleDeleteConversation = async (conversationId, e) => {
@@ -625,6 +977,11 @@ function ChatInterface() {
   };
 
   const handleFileSelect = (e) => {
+    if (isMetricLocked('document_analysis')) {
+      navigate('/billing');
+      return;
+    }
+
     const file = e.target.files[0];
     if (file) {
       // Check file type
@@ -700,6 +1057,8 @@ function ChatInterface() {
       }
       
     } catch (error) {
+      const handled = await handleQuotaError(error);
+      if (handled) return;
       console.error('Document analysis error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -709,6 +1068,7 @@ function ChatInterface() {
     } finally {
       setIsAnalyzing(false);
       setIsLoading(false);
+      await fetchBillingStatus();
     }
   };
 
@@ -827,6 +1187,11 @@ function ChatInterface() {
   };
   
   const handleDownloadPDF = async (message) => {
+    if (isMetricLocked('pdf_exports')) {
+      navigate('/billing');
+      return;
+    }
+
     try {
       // Extract only the document portion (remove AI explanations)
       const cleanDocument = extractDocumentOnly(message.content);
@@ -870,8 +1235,11 @@ function ChatInterface() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      await fetchBillingStatus();
       
     } catch (err) {
+      const handled = await handleQuotaError(err);
+      if (handled) return;
       console.error('Failed to generate PDF:', err);
       alert('Failed to generate PDF. Please try again.');
     }
@@ -1000,9 +1368,25 @@ function ChatInterface() {
   }
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden">
+    <div className="h-screen bg-background flex overflow-hidden relative">
+      {/* Mobile backdrop */}
+      {isMobile && sidebarOpen && (
+        <button
+          className="absolute inset-0 bg-black/30 z-30"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close sidebar"
+        />
+      )}
+
       {/* Sidebar */}
-      <div className={`bg-card border-r border-border flex flex-col transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden h-full`}>
+      <div
+        className={`bg-card border-r border-border flex flex-col transition-all duration-300 h-full
+        ${
+          isMobile
+            ? `fixed inset-y-0 left-0 z-40 w-72 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+            : `${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden`
+        }`}
+      >
         {/* Sidebar Header */}
         <div className="p-4 border-b border-border flex-shrink-0">
           <button
@@ -1063,11 +1447,25 @@ function ChatInterface() {
             <Logout01Icon size={16} />
             <span>Logout</span>
           </button>
+          <button
+            onClick={() => navigate('/billing')}
+            className="w-full mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
+          >
+            Billing & Usage
+          </button>
+          {(user?.role === 'admin' || user?.role === 'superadmin') && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="w-full mt-1 text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
+            >
+              Admin Console
+            </button>
+          )}
         </div>
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col h-full min-w-0">
+      <div className="flex-1 flex flex-col h-full min-w-0 relative z-10">
         {/* Chat Header */}
         <header className="bg-card border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -1103,19 +1501,116 @@ function ChatInterface() {
             >
               {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
             </button>
+
+            <button
+              onClick={toggleDemoAdminRole}
+              disabled={isRoleUpdating}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-60"
+              title="Demo role toggle (user/admin)"
+            >
+              <span className="text-xs text-muted-foreground hidden sm:inline">Admin</span>
+              <span
+                className={`relative w-9 h-5 rounded-full transition-colors ${
+                  user?.role === 'admin' || user?.role === 'superadmin' ? 'bg-primary' : 'bg-muted'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                    user?.role === 'admin' || user?.role === 'superadmin' ? 'translate-x-4' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+            </button>
           </div>
         </header>
 
         {/* Messages Area - Fixed Height, Scrollable */}
         <div className="flex-1 overflow-y-auto p-4 min-h-0">
           <div className="max-w-4xl mx-auto space-y-4">
+            {actionToast && (
+              <div
+                className={`rounded-lg border p-3 text-sm ${
+                  actionToast.tone === 'success'
+                    ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : 'border-destructive/40 bg-destructive/10 text-destructive'
+                }`}
+              >
+                {actionToast.message}
+              </div>
+            )}
+
             {messages.length === 0 && (
-              <div className="text-center py-12">
+              <div className="text-center py-10">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <MessageMultiple01Icon size={32} className="text-primary" />
                 </div>
                 <h2 className="text-xl font-bold text-foreground mb-2">Start a conversation</h2>
                 <p className="text-muted-foreground">Ask me anything about government services</p>
+                <div className="mt-6 w-full max-w-5xl mx-auto rounded-2xl border border-border bg-card/70 p-4 sm:p-6 text-left">
+                  <div className="mb-4">
+                    <h3 className="text-lg sm:text-xl font-bold text-foreground">
+                      {ACTION_HUB_COPY.action_hub_copy.title}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {ACTION_HUB_COPY.action_hub_copy.subtitle}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {ACTION_HUB_COPY.action_hub_copy.helper_note}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {actionModules.map((action) => {
+                      const copy = getActionCopy(action.id);
+                      const locked = isActionLocked(action);
+                      const quotaBadge = getActionQuotaBadge(action);
+                      return (
+                        <div
+                          key={action.id}
+                          className={`rounded-xl border p-4 transition-all ${
+                            locked
+                              ? 'border-border bg-muted/60'
+                              : 'border-border bg-card hover:border-primary/40 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">
+                              {(action.icon || 'AC').replace('Icon', '').slice(0, 2).toUpperCase()}
+                            </div>
+                            {locked && <span className="text-xs text-muted-foreground">Upgrade</span>}
+                          </div>
+
+                          <h4 className="text-sm font-semibold text-foreground mt-3">
+                            {copy.card_title || action.title}
+                          </h4>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {copy.card_description || action.description}
+                          </p>
+
+                          {quotaBadge && (
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                              <span className="text-[11px] text-muted-foreground">{quotaBadge.metricLabel}</span>
+                              <span className={`text-[11px] px-2 py-1 rounded-full ${quotaBadge.className}`}>
+                                {quotaBadge.label}
+                              </span>
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => openActionDialog(action)}
+                            className="mt-4 w-full rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                          >
+                            {commonCopy.open_button || 'Open'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground mt-4">
+                    {commonCopy.disclaimer}
+                  </p>
+                </div>
               </div>
             )}
 
@@ -1319,25 +1814,52 @@ function ChatInterface() {
                   className="hidden"
                 />
                 
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
-                  title="Upload document (legal notice, certificate, etc.)"
-                >
-                  <AttachmentIcon size={20} />
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={startVoiceConversation}
+                    disabled={isMetricLocked('stt_requests')}
+                    className={`p-3 rounded-lg transition-colors ${
+                      isMetricLocked('stt_requests')
+                        ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
+                    title={isMetricLocked('stt_requests') ? 'Voice quota exhausted. Upgrade plan.' : 'Start AI voice conversation'}
+                  >
+                    <Call02Icon size={20} />
+                  </button>
 
-                <button
-                  onClick={isRecording ? handleStopRecording : handleStartRecording}
-                  className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
-                    isRecording
-                      ? 'bg-destructive text-destructive-foreground animate-pulse'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                  }`}
-                  title="Voice to text"
-                >
-                  <Mic01Icon size={20} />
-                </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isMetricLocked('document_analysis')}
+                    className={`p-3 rounded-lg transition-colors ${
+                      isMetricLocked('document_analysis')
+                        ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
+                    title={isMetricLocked('document_analysis') ? 'Document analysis quota exhausted. Upgrade plan.' : 'Upload document (legal notice, certificate, etc.)'}
+                  >
+                    <AttachmentIcon size={20} />
+                  </button>
+
+                  <button
+                    onClick={isRecording ? handleStopRecording : handleStartRecording}
+                    disabled={!isRecording && isMetricLocked('stt_requests')}
+                    className={`p-3 transition-colors rounded-lg ${
+                      isRecording
+                        ? 'bg-destructive text-destructive-foreground animate-pulse'
+                        : isMetricLocked('stt_requests')
+                          ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
+                    title={
+                      isMetricLocked('stt_requests') && !isRecording
+                        ? 'Voice quota exhausted. Upgrade plan.'
+                        : 'Voice to text'
+                    }
+                  >
+                    <Mic01Icon size={20} />
+                  </button>
+                </div>
 
                 <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
                   <textarea
@@ -1363,20 +1885,118 @@ function ChatInterface() {
                     <ArrowRight01Icon size={20} />
                   )}
                 </button>
-                
-                {/* ChatGPT-style inline voice conversation button */}
-                <button
-                  onClick={startVoiceConversation}
-                  className="p-3 bg-gradient-to-br from-purple-500 to-blue-500 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all flex-shrink-0"
-                  title="Start AI voice conversation"
-                >
-                  <Call02Icon size={20} />
-                </button>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {activeAction && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-border bg-card p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold text-foreground">
+                  {getActionCopy(activeAction.id).dialog_title || activeAction.dialog?.title || activeAction.title}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {getActionCopy(activeAction.id).dialog_intro || activeAction.description}
+                </p>
+              </div>
+              <button
+                onClick={closeActionDialog}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                {commonCopy.cancel_button || 'Cancel'}
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {(activeAction.dialog?.fields || []).map((field) => {
+                const label = `${field.label}${field.required ? (commonCopy.required_suffix || '*') : ''}`;
+                const currentValue = field.type === 'file'
+                  ? ''
+                  : (actionFormValues[field.id] ?? '');
+                return (
+                  <div key={field.id}>
+                    <label className="block text-sm font-medium text-foreground mb-1">
+                      {label}
+                    </label>
+
+                    {field.type === 'select' && (
+                      <select
+                        value={currentValue}
+                        onChange={(e) => updateActionFieldValue(field.id, e.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      >
+                        <option value="">Select...</option>
+                        {(field.options || []).map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {field.type === 'textarea' && (
+                      <textarea
+                        value={currentValue}
+                        onChange={(e) => updateActionFieldValue(field.id, e.target.value)}
+                        placeholder={field.placeholder || ''}
+                        className="w-full min-h-[90px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      />
+                    )}
+
+                    {(field.type === 'text' || field.type === 'date') && (
+                      <input
+                        type={field.type}
+                        value={currentValue}
+                        onChange={(e) => updateActionFieldValue(field.id, e.target.value)}
+                        maxLength={field.max_length || undefined}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      />
+                    )}
+
+                    {field.type === 'file' && (
+                      <div className="space-y-1">
+                        <input
+                          key={`${field.id}-${actionFileInputVersion}`}
+                          type="file"
+                          accept={Array.isArray(field.accept) ? field.accept.join(',') : undefined}
+                          onChange={(e) => updateActionFieldFile(field.id, e.target.files?.[0] || null)}
+                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-primary"
+                        />
+                        {actionFormFiles[field.id]?.name && (
+                          <p className="text-xs text-muted-foreground">Selected: {actionFormFiles[field.id].name}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {actionFormError && (
+              <p className="mt-4 text-sm text-destructive">{actionFormError}</p>
+            )}
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                onClick={closeActionDialog}
+                className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-accent transition-colors"
+              >
+                {commonCopy.cancel_button || 'Cancel'}
+              </button>
+              <button
+                onClick={submitActionDialog}
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                {activeAction.dialog?.submit_label || commonCopy.submit_button || 'Generate Query & Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
