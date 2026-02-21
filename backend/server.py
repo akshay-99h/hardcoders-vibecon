@@ -440,7 +440,7 @@ async def analyze_document(
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=400, 
-            detail=f"Unsupported file type. Allowed: JPEG, PNG, WEBP, PDF"
+            detail="Unsupported file type. Allowed: JPEG, PNG, WEBP, PDF"
         )
     
     # Check file size (10MB limit)
@@ -578,7 +578,7 @@ async def extract_text_from_document(
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=400, 
-            detail=f"Unsupported file type. Allowed: JPEG, PNG, WEBP"
+            detail="Unsupported file type. Allowed: JPEG, PNG, WEBP"
         )
     
     try:
