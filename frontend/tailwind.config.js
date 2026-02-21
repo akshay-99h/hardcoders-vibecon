@@ -7,6 +7,10 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        primary: {
+          DEFAULT: '#0f49bd', // Deep Blue from Raksha AI
+          foreground: '#ffffff',
+        },
         background: 'var(--background)',
         foreground: 'var(--foreground)',
         card: {
@@ -16,10 +20,6 @@ module.exports = {
         popover: {
           DEFAULT: 'var(--popover)',
           foreground: 'var(--popover-foreground)',
-        },
-        primary: {
-          DEFAULT: 'var(--primary)',
-          foreground: 'var(--primary-foreground)',
         },
         secondary: {
           DEFAULT: 'var(--secondary)',
@@ -47,7 +47,7 @@ module.exports = {
         sm: 'calc(var(--radius) - 4px)',
       },
       fontFamily: {
-        sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+        sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
         serif: ['Lora', 'serif'],
         mono: ['IBM Plex Mono', 'monospace'],
       },
