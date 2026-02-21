@@ -33,6 +33,13 @@ function ChatInterface() {
 
   useEffect(() => {
     handleAuthCallback();
+    
+    // Cleanup speech synthesis on unmount
+    return () => {
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+      }
+    };
   }, []);
 
   useEffect(() => {
