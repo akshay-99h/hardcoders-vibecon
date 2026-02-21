@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { HiArrowLeft, HiShieldCheck } from 'react-icons/hi2';
+import { HiArrowLeft, HiShieldCheck, HiCheckCircle, HiSparkles } from 'react-icons/hi2';
 import { Button } from './ui/button';
 
 function HowItWorks() {
@@ -19,6 +19,24 @@ function HowItWorks() {
       document.documentElement.classList.remove('dark');
     }
   }, []);
+
+  const features = [
+    {
+      icon: <HiShieldCheck className="w-6 h-6" />,
+      title: "Secure & Private",
+      description: "Your data is encrypted and never shared"
+    },
+    {
+      icon: <HiSparkles className="w-6 h-6" />,
+      title: "AI-Powered",
+      description: "Advanced AI to simplify complex processes"
+    },
+    {
+      icon: <HiCheckCircle className="w-6 h-6" />,
+      title: "Easy to Use",
+      description: "Step-by-step guidance for every task"
+    }
+  ];
 
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
@@ -56,6 +74,36 @@ function HowItWorks() {
           <p className="text-lg text-muted-foreground mb-12">
             Get started with HardCoders in just a few simple steps. Our platform makes it easy to navigate complex legal and financial processes.
           </p>
+
+          {/* Feature Cards */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.1 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16"
+          >
+            {features.map((feature, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 + index * 0.1 }}
+                className="group p-6 rounded-lg bg-card border border-border hover:border-primary/50 hover:shadow-lg transition-all duration-300"
+              >
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+                  <div className="text-primary">
+                    {feature.icon}
+                  </div>
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  {feature.title}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {feature.description}
+                </p>
+              </motion.div>
+            ))}
+          </motion.div>
 
           {/* Step 1 */}
           <div className="mb-16">
