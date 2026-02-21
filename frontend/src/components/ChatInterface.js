@@ -173,6 +173,12 @@ function ChatInterface() {
   };
 
   const handleSendMessage = async () => {
+    // If file is selected, do document analysis instead
+    if (selectedFile) {
+      await handleDocumentAnalysis();
+      return;
+    }
+    
     if (!inputMessage.trim()) return;
 
     const userMessage = inputMessage.trim();
