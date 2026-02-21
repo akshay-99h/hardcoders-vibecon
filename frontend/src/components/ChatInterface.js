@@ -1000,6 +1000,20 @@ function ChatInterface() {
                         {voiceState === 'thinking' && 'Analyzing your question...'}
                         {voiceState === 'speaking' && 'Listen to the response...'}
                       </p>
+                      {/* Volume indicator */}
+                      {voiceState === 'listening' && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-purple-500 transition-all duration-75"
+                              style={{ width: `${voiceVolume}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8">
+                            {voiceVolume > 8 ? '🎤' : '...'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   
