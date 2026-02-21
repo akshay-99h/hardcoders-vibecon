@@ -129,7 +129,7 @@ function LandingPage() {
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <HiShieldCheck className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-bold text-primary">HardCoders</span>
+            <span className="text-2xl font-bold text-primary">RakshaAI</span>
           </div>
         </motion.div>
 
