@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { 
   HiPlus, HiTrash, HiMenu, HiSun, HiMoon,
   HiPaperClip, HiMicrophone, HiPaperAirplane,
-  HiChatAlt2, HiLogout, HiVolumeUp, HiClipboardCopy, HiCheck, HiPhone
+  HiChatAlt2, HiLogout, HiVolumeUp, HiClipboardCopy, HiCheck, HiPhone, HiDownload
 } from 'react-icons/hi';
 import api from '../utils/api';
 
