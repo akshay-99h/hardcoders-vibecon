@@ -32,8 +32,8 @@ function AuthCallback() {
         // Store user data
         localStorage.setItem('user', JSON.stringify(user));
 
-        // Navigate to dashboard with user data
-        navigate('/dashboard', { state: { user }, replace: true });
+        // Navigate to chat with user data
+        navigate('/chat', { state: { user }, replace: true });
       } catch (error) {
         console.error('Auth callback error:', error);
         navigate('/', { replace: true });
