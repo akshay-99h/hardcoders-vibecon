@@ -19,8 +19,7 @@ from services.chat_agent import ChatAgent
 from services.voice_service import VoiceService
 from services.context_service import ContextService
 from services.vision_service import VisionService
-from services.call_service import call_service
-from services.signaling_service import manager, handle_signaling_message
+from services.ai_call_service import ai_call_service
 
 # Helper function to serialize datetime objects
 def serialize_doc(doc):
@@ -637,130 +636,150 @@ async def root():
     """Root endpoint"""
     return {"message": "Mission-Mode Platform API", "version": "1.0.0"}
 
-# ============== CALL ENDPOINTS ==============
+# ============== AI CALL ENDPOINTS ==============
 
-@app.post("/api/calls/token")
-async def create_call_token(
+@app.post("/api/ai-call/start")
+async def start_ai_call(
     request: Request,
     authorization: Optional[str] = Header(None)
 ):
-    """Generate short-lived token for WebRTC call"""
+    """Start an AI voice call session"""
     user = await get_current_user(authorization, request)
     
     body = await request.json()
-    room_id = body.get("room_id")
+    conversation_id = body.get("conversation_id")
+    language = body.get("language", "en")
     
-    if not room_id:
-        raise HTTPException(status_code=400, detail="room_id required")
-    
-    # Generate call token
-    token = call_service.generate_call_token(user["user_id"], room_id)
-    
-    # Get ICE server configuration
-    ice_servers = call_service.get_ice_servers()
+    # Create call session
+    call_id = ai_call_service.create_call_session(
+        user_id=user["user_id"],
+        conversation_id=conversation_id,
+        language=language
+    )
     
     return {
-        "token": token,
-        "room_id": room_id,
-        "ice_servers": ice_servers,
-        "expires_in": call_service.token_ttl
+        "call_id": call_id,
+        "language": language,
+        "message": "Call session started"
     }
 
 
-@app.get("/api/calls/{room_id}/status")
-async def get_call_status(
-    room_id: str,
+@app.post("/api/ai-call/turn")
+async def process_call_turn(
+    call_id: str = None,
+    audio: UploadFile = File(...),
     authorization: Optional[str] = Header(None),
     request: Request = None
 ):
-    """Get current status of a call room"""
+    """Process one turn of AI call conversation"""
     user = await get_current_user(authorization, request)
     
-    room = call_service.get_room(room_id)
-    participant_count = manager.get_participant_count(room_id)
+    if not call_id:
+        raise HTTPException(status_code=400, detail="call_id required")
     
-    if not room:
-        return {
-            "room_id": room_id,
-            "status": "not_found",
-            "participant_count": participant_count,
-            "is_full": False
-        }
+    # Verify call session
+    call_session = ai_call_service.get_call_session(call_id)
+    if not call_session:
+        raise HTTPException(status_code=404, detail="Call session not found")
     
-    return {
-        "room_id": room_id,
-        "status": "active" if participant_count > 0 else "empty",
-        "participant_count": participant_count,
-        "is_full": room.is_full(),
-        "max_participants": room.max_participants
-    }
-
-
-@app.websocket("/ws/calls/{room_id}")
-async def websocket_call_endpoint(
-    websocket: WebSocket,
-    room_id: str,
-    token: str = Query(...)
-):
-    """WebSocket endpoint for call signaling"""
+    if call_session["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
     
-    # Verify token
-    payload = call_service.verify_call_token(token)
-    if not payload:
-        await websocket.close(code=4001, reason="Invalid or expired token")
-        return
+    # Read audio data
+    audio_data = await audio.read()
     
-    user_id = payload.get("user_id")
-    token_room_id = payload.get("room_id")
+    # Get conversation context if available
+    conversation_id = call_session.get("conversation_id")
+    conversation_context = ""
+    knowledge_context = ""
+    document_context = ""
     
-    # Verify room ID matches token
-    if token_room_id != room_id:
-        await websocket.close(code=4002, reason="Room ID mismatch")
-        return
-    
-    # Get or create room
-    room = call_service.get_or_create_room(room_id)
-    
-    # Check if room is full
-    if room.is_full() and user_id not in room.participants:
-        await websocket.close(code=4003, reason="Room is full")
-        return
-    
-    # Add participant to room
-    if not room.add_participant(user_id):
-        await websocket.close(code=4003, reason="Room is full")
-        return
-    
-    # Connect to WebSocket manager
-    await manager.connect(room_id, user_id, websocket)
-    
-    print(f"User {user_id} joined call room {room_id}")
+    if conversation_id:
+        messages = []
+        async for msg in db.messages.find(
+            {"conversation_id": conversation_id},
+            {"_id": 0}
+        ).sort("timestamp", 1).limit(10):
+            messages.append(msg)
+        
+        if messages:
+            regular_messages = []
+            for m in messages:
+                if m.get("is_document_context"):
+                    document_context = m.get("content", "")
+                else:
+                    regular_messages.append(f"{m['role']}: {m['content']}")
+            conversation_context = "\n".join(regular_messages)
     
     try:
-        while True:
-            # Receive message
-            data = await websocket.receive_json()
+        # Process audio turn
+        result = await ai_call_service.process_audio_turn(
+            call_id=call_id,
+            audio_data=audio_data,
+            conversation_context=conversation_context,
+            knowledge_context=knowledge_context,
+            document_context=document_context
+        )
+        
+        # Save messages to conversation if conversation_id exists
+        if conversation_id:
+            # Save user message
+            user_msg = {
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "conversation_id": conversation_id,
+                "role": "user",
+                "content": result["transcribed_text"],
+                "timestamp": datetime.now(timezone.utc),
+                "from_call": True
+            }
+            await db.messages.insert_one(user_msg)
             
-            # Handle signaling message
-            await handle_signaling_message(room_id, user_id, data, websocket)
-    
-    except WebSocketDisconnect:
-        print(f"User {user_id} disconnected from call room {room_id}")
+            # Save assistant message
+            assistant_msg = {
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "conversation_id": conversation_id,
+                "role": "assistant",
+                "content": result["response_text"],
+                "timestamp": datetime.now(timezone.utc),
+                "from_call": True
+            }
+            await db.messages.insert_one(assistant_msg)
+            
+            # Update conversation
+            await db.conversations.update_one(
+                {"conversation_id": conversation_id},
+                {"$set": {"updated_at": datetime.now(timezone.utc)}}
+            )
+        
+        return result
+        
     except Exception as e:
-        print(f"WebSocket error for user {user_id}: {e}")
-    finally:
-        # Cleanup
-        manager.disconnect(room_id, user_id)
-        room.remove_participant(user_id)
-        
-        # Notify others
-        await manager.broadcast_to_room(room_id, {
-            "type": "user_left",
-            "user_id": user_id
-        })
-        
-        # Cleanup empty room
-        call_service.cleanup_room(room_id)
+        print(f"AI call turn error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai-call/end")
+async def end_ai_call(
+    request: Request,
+    authorization: Optional[str] = Header(None)
+):
+    """End AI voice call session"""
+    user = await get_current_user(authorization, request)
+    
+    body = await request.json()
+    call_id = body.get("call_id")
+    
+    if not call_id:
+        raise HTTPException(status_code=400, detail="call_id required")
+    
+    # Verify and end session
+    call_session = ai_call_service.get_call_session(call_id)
+    if call_session and call_session["user_id"] == user["user_id"]:
+        ai_call_service.end_call_session(call_id)
+    
+    return {"message": "Call ended"}
 
 
 if __name__ == "__main__":
