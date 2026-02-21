@@ -828,9 +828,17 @@ function ChatInterface() {
   
   const handleDownloadPDF = async (message) => {
     try {
-      // Detect document type from message content
+      // Extract only the document portion (remove AI explanations)
+      const cleanDocument = extractDocumentOnly(message.content);
+      
+      if (!cleanDocument) {
+        alert('Could not extract document. Please try copying the text manually.');
+        return;
+      }
+      
+      // Detect document type
       let documentType = "Document";
-      const content = message.content.toLowerCase();
+      const content = cleanDocument.toLowerCase();
       
       if (content.includes("rti") || content.includes("right to information")) {
         documentType = "RTI_Application";
@@ -847,7 +855,7 @@ function ChatInterface() {
       // Call PDF generation API
       const response = await api.post('/api/generate-pdf', {
         document_type: documentType,
-        document_content: message.content,
+        document_content: cleanDocument,
         user_name: "Citizen"
       }, {
         responseType: 'blob'
@@ -867,6 +875,97 @@ function ChatInterface() {
       console.error('Failed to generate PDF:', err);
       alert('Failed to generate PDF. Please try again.');
     }
+  };
+  
+  // Extract only the document portion from AI response
+  const extractDocumentOnly = (text) => {
+    // Common patterns that indicate document start
+    const startPatterns = [
+      /^To,?\s*$/m,
+      /^Subject:/m,
+      /^The\s+(?:Central|State)\s+Public\s+Information\s+Officer/m,
+      /^Respected\s+Sir\/Madam,?$/m,
+      /^Dear\s+/m,
+      /^I,?\s+\[?[A-Z]/m  // "I, [Name]" pattern
+    ];
+    
+    // Common patterns that indicate document end
+    const endPatterns = [
+      /^Enclosures?:/m,
+      /^---+$/m,
+      /^Your\s+(?:RTI|complaint|document|email)/mi,
+      /^I've\s+(?:generated|created|drafted)/mi,
+      /^This\s+(?:document|letter|application)/mi,
+      /^Please\s+(?:print|send|file)/mi,
+      /^You\s+can\s+(?:now|download)/mi,
+      /^\*\*(?:Instructions?|Next\s+Steps?|Important)/mi
+    ];
+    
+    let documentStart = -1;
+    let documentEnd = text.length;
+    
+    // Find document start
+    for (const pattern of startPatterns) {
+      const match = text.match(pattern);
+      if (match && match.index !== undefined) {
+        documentStart = match.index;
+        break;
+      }
+    }
+    
+    // If no start found, check if entire message is a document (starts with To, or Subject:)
+    if (documentStart === -1) {
+      const firstLine = text.split('\n')[0].trim();
+      if (firstLine.match(/^(?:To,?|Subject:|Respected|Dear)/i)) {
+        documentStart = 0;
+      }
+    }
+    
+    if (documentStart === -1) {
+      return null; // Not a document
+    }
+    
+    // Find document end (look for explanatory text after document)
+    const textAfterStart = text.substring(documentStart);
+    for (const pattern of endPatterns) {
+      const match = textAfterStart.match(pattern);
+      if (match && match.index !== undefined && match.index > 100) { // At least 100 chars in
+        documentEnd = documentStart + match.index;
+        break;
+      }
+    }
+    
+    // Extract document portion
+    let document = text.substring(documentStart, documentEnd).trim();
+    
+    // Remove any trailing explanation lines
+    const lines = document.split('\n');
+    let lastValidLine = lines.length;
+    
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim().toLowerCase();
+      
+      // Stop if we hit explanatory text
+      if (
+        line.startsWith('your ') ||
+        line.startsWith('this ') ||
+        line.startsWith('please ') ||
+        line.startsWith('you can') ||
+        line.startsWith('i\'ve ') ||
+        line.startsWith('**') ||
+        line.includes('download') ||
+        line.includes('ready above')
+      ) {
+        lastValidLine = i;
+      } else if (line.length > 10) {
+        // Found actual content, stop
+        break;
+      }
+    }
+    
+    document = lines.slice(0, lastValidLine).join('\n').trim();
+    
+    return document;
   };
   
   // Check if message is a generated document
