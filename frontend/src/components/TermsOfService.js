@@ -59,138 +59,126 @@ function TermsOfService() {
             {t(language, 'terms.lastUpdated')}
           </p>
 
-          {/* Introduction */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Agreement to Terms</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.agreementTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              These Terms of Service ("Terms") govern your access to and use of RakshaAI's services, including our website, applications, and any related services (collectively, the "Services").
+              {t(language, 'terms.agreementPara1')}
             </p>
             <p className="text-base text-muted-foreground leading-relaxed">
-              By accessing or using our Services, you agree to be bound by these Terms. If you do not agree to these Terms, do not use our Services.
+              {t(language, 'terms.agreementPara2')}
             </p>
           </div>
 
-          {/* Use of Services */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Use of Services</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.useTitle')}</h2>
             
-            <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">Eligibility</h3>
+            <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">{t(language, 'terms.eligibilityTitle')}</h3>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              You must be at least 13 years old to use our Services. By using our Services, you represent and warrant that you meet this age requirement.
+              {t(language, 'terms.eligibilityDesc')}
             </p>
 
-            <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">Account Registration</h3>
+            <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">{t(language, 'terms.accountTitle')}</h3>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              To access certain features of our Services, you must register for an account using Google Authentication. You agree to:
+              {t(language, 'terms.accountDesc')}
             </p>
             <ul className="list-disc list-inside text-base text-muted-foreground leading-relaxed ml-4">
-              <li>Provide accurate and complete information</li>
-              <li>Maintain the security of your account</li>
-              <li>Promptly update any changes to your information</li>
-              <li>Accept responsibility for all activities under your account</li>
+              <li>{t(language, 'terms.account1')}</li>
+              <li>{t(language, 'terms.account2')}</li>
+              <li>{t(language, 'terms.account3')}</li>
+              <li>{t(language, 'terms.account4')}</li>
             </ul>
           </div>
 
-          {/* Acceptable Use */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Acceptable Use</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.acceptableTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              You agree not to:
+              {t(language, 'terms.acceptableDesc')}
             </p>
             <ul className="list-disc list-inside text-base text-muted-foreground leading-relaxed ml-4">
-              <li>Use the Services for any illegal purpose or in violation of any laws</li>
-              <li>Impersonate any person or entity</li>
-              <li>Interfere with or disrupt the Services or servers</li>
-              <li>Attempt to gain unauthorized access to any part of the Services</li>
-              <li>Upload or transmit viruses, malware, or other malicious code</li>
-              <li>Harass, abuse, or harm other users</li>
-              <li>Collect or store personal data of other users without consent</li>
-              <li>Use automated systems to access the Services without permission</li>
+              <li>{t(language, 'terms.acceptable1')}</li>
+              <li>{t(language, 'terms.acceptable2')}</li>
+              <li>{t(language, 'terms.acceptable3')}</li>
+              <li>{t(language, 'terms.acceptable4')}</li>
+              <li>{t(language, 'terms.acceptable5')}</li>
+              <li>{t(language, 'terms.acceptable6')}</li>
+              <li>{t(language, 'terms.acceptable7')}</li>
+              <li>{t(language, 'terms.acceptable8')}</li>
             </ul>
           </div>
 
-          {/* Content */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Content</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.contentTitle')}</h2>
             
-            <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">Your Content</h3>
+            <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">{t(language, 'terms.yourContentTitle')}</h3>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              You retain ownership of any content you submit to the Services ("Your Content"). By submitting Your Content, you grant RakshaAI a worldwide, non-exclusive, royalty-free license to use, reproduce, and display Your Content solely to provide and improve the Services.
+              {t(language, 'terms.yourContentDesc')}
             </p>
 
-            <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">Our Content</h3>
+            <h3 className="text-xl font-semibold text-foreground mb-3 mt-6">{t(language, 'terms.ourContentTitle')}</h3>
             <p className="text-base text-muted-foreground leading-relaxed">
-              All content provided by RakshaAI, including text, graphics, logos, and software, is owned by RakshaAI or its licensors and is protected by intellectual property laws. You may not use our content without our prior written permission.
+              {t(language, 'terms.ourContentDesc')}
             </p>
           </div>
 
-          {/* Disclaimer of Warranties */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Disclaimer of Warranties</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.disclaimerTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              THE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED. RAKSHAAI DISCLAIMS ALL WARRANTIES, INCLUDING BUT NOT LIMITED TO:
+              {t(language, 'terms.disclaimerDesc')}
             </p>
             <ul className="list-disc list-inside text-base text-muted-foreground leading-relaxed ml-4">
-              <li>Merchantability and fitness for a particular purpose</li>
-              <li>Accuracy, reliability, or completeness of information</li>
-              <li>Uninterrupted or error-free operation</li>
-              <li>Security of data transmission</li>
+              <li>{t(language, 'terms.disclaimer1')}</li>
+              <li>{t(language, 'terms.disclaimer2')}</li>
+              <li>{t(language, 'terms.disclaimer3')}</li>
+              <li>{t(language, 'terms.disclaimer4')}</li>
             </ul>
           </div>
 
-          {/* Not Legal Advice */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Not Legal or Financial Advice</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.notAdviceTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed">
-              The information and guidance provided through our Services are for informational purposes only and do not constitute legal, financial, or professional advice. You should consult with qualified professionals for advice specific to your situation. RakshaAI is not responsible for any actions you take based on information from our Services.
+              {t(language, 'terms.notAdviceDesc')}
             </p>
           </div>
 
-          {/* Limitation of Liability */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Limitation of Liability</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.limitationTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed">
-              TO THE MAXIMUM EXTENT PERMITTED BY LAW, RAKSHAAI SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS OR REVENUES, WHETHER INCURRED DIRECTLY OR INDIRECTLY, OR ANY LOSS OF DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES RESULTING FROM YOUR USE OF THE SERVICES.
+              {t(language, 'terms.limitationDesc')}
             </p>
           </div>
 
-          {/* Indemnification */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Indemnification</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.indemnificationTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed">
-              You agree to indemnify, defend, and hold harmless RakshaAI and its officers, directors, employees, and agents from any claims, liabilities, damages, losses, and expenses arising out of or related to your use of the Services or violation of these Terms.
+              {t(language, 'terms.indemnificationDesc')}
             </p>
           </div>
 
-          {/* Termination */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Termination</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.terminationTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed">
-              We may terminate or suspend your access to the Services at any time, with or without cause or notice. Upon termination, your right to use the Services will immediately cease. You may also terminate your account at any time by contacting us.
+              {t(language, 'terms.terminationDesc')}
             </p>
           </div>
 
-          {/* Governing Law */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Governing Law</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.governingTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed">
-              These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which RakshaAI operates, without regard to its conflict of law provisions.
+              {t(language, 'terms.governingDesc')}
             </p>
           </div>
 
-          {/* Changes to Terms */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Changes to Terms</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.changesTermsTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed">
-              We reserve the right to modify these Terms at any time. We will notify you of any changes by posting the new Terms on this page and updating the "Last updated" date. Your continued use of the Services after such modifications constitutes your acceptance of the updated Terms.
+              {t(language, 'terms.changesTermsDesc')}
             </p>
           </div>
 
-          {/* Contact Information */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Contact Us</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">{t(language, 'terms.contactTitle')}</h2>
             <p className="text-base text-muted-foreground leading-relaxed mb-4">
-              If you have any questions about these Terms, please contact us:
+              {t(language, 'terms.contactDesc')}
             </p>
             <div className="mt-4 p-4 bg-card border border-border rounded-lg">
               <p className="text-base text-foreground font-medium">{t(language, 'rakshaAI')}</p>
