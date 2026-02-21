@@ -247,6 +247,18 @@ function ChatInterface() {
     }
   };
 
+  // Show loading screen while authenticating
+  if (isAuthenticating) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Authenticating...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen bg-background flex overflow-hidden">
       {/* Sidebar */}
