@@ -6,6 +6,9 @@ import './App.css';
 import LandingPage from './components/LandingPage';
 import AuthCallback from './components/AuthCallback';
 import ChatInterface from './components/ChatInterface';
+import HowItWorks from './components/HowItWorks';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsOfService from './components/TermsOfService';
 
 function AppRouter() {
   const location = useLocation();
@@ -19,6 +22,9 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/how-it-works" element={<HowItWorks />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
       <Route path="/chat" element={<ChatInterface />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
