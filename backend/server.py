@@ -117,7 +117,7 @@ async def get_current_user(authorization: Optional[str] = Header(None), request:
     if not user_doc:
         raise HTTPException(status_code=404, detail="User not found")
     
-    return user_doc
+    return serialize_doc(user_doc)
 
 @app.post("/api/auth/session")
 async def create_session(request: Request):
