@@ -8,6 +8,7 @@ import {
   MessageMultiple01Icon, Logout01Icon, VolumeHighIcon, Copy01Icon, Tick02Icon, Call02Icon, Download01Icon
 } from 'hugeicons-react';
 import api from '../utils/api';
+import { ACTION_HUB_COPY, ACTION_HUB_SCHEMA } from '../config/actionHubConfig';
 
 function ChatInterface() {
   const navigate = useNavigate();
@@ -29,6 +30,12 @@ function ChatInterface() {
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [isRoleUpdating, setIsRoleUpdating] = useState(false);
+  const [activeAction, setActiveAction] = useState(null);
+  const [actionFormValues, setActionFormValues] = useState({});
+  const [actionFormFiles, setActionFormFiles] = useState({});
+  const [actionFormError, setActionFormError] = useState('');
+  const [actionToast, setActionToast] = useState(null);
+  const [actionFileInputVersion, setActionFileInputVersion] = useState(0);
   const [isInVoiceMode, setIsInVoiceMode] = useState(false);
   const [voiceCallId, setVoiceCallId] = useState(null);
   const [voiceState, setVoiceState] = useState('idle'); // idle, listening, thinking, speaking
@@ -79,6 +86,12 @@ function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (!actionToast) return undefined;
+    const timeoutId = window.setTimeout(() => setActionToast(null), 2800);
+    return () => window.clearTimeout(timeoutId);
+  }, [actionToast]);
 
   const handleAuthCallback = async () => {
     setIsAuthenticating(true);
@@ -192,50 +205,22 @@ function ChatInterface() {
     }
   };
 
-  const toolCards = [
-    {
-      id: 'track',
-      title: 'Track Application',
-      description: 'Passport, Aadhaar, PAN and more',
-      prompt: 'Help me track my government application status step by step.',
-      metric: 'chat_messages',
-    },
-    {
-      id: 'notice',
-      title: 'Analyze Notice',
-      description: 'Understand legal/government notices',
-      prompt: 'Help me analyze a government notice and explain the next steps.',
-      metric: 'document_analysis',
-    },
-    {
-      id: 'draft',
-      title: 'Draft Complaint/RTI',
-      description: 'Generate structured letters fast',
-      prompt: 'Help me draft an RTI or complaint with the required details checklist.',
-      metric: 'chat_messages',
-    },
-    {
-      id: 'deadline',
-      title: 'Deadline Autopilot',
-      description: 'Auto-followups and reminders',
-      prompt: 'Set up a deadline tracker and follow-up plan for my government task.',
-      metric: 'automation_runs',
-    },
-    {
-      id: 'fraud',
-      title: 'Fraud URL Check',
-      description: 'Detect fake portals before login',
-      prompt: 'Check if this government website URL is safe and official.',
-      metric: 'chat_messages',
-    },
-    {
-      id: 'guided',
-      title: 'Guided Portal Assist',
-      description: 'Step-by-step with human interventions',
-      prompt: 'Guide me through a portal workflow and pause whenever manual action is needed.',
-      metric: 'automation_runs',
-    },
-  ];
+  const actionModules = ACTION_HUB_SCHEMA.actions || [];
+  const actionCopyMap = ACTION_HUB_COPY.action_copy || {};
+  const commonCopy = ACTION_HUB_COPY.common_copy || {};
+  const composeConfig = ACTION_HUB_SCHEMA.prompt_compose || {};
+  const submitBehavior = ACTION_HUB_SCHEMA.submit_behavior || {};
+  const actionMetricMap = {
+    application_followup_draft: 'chat_messages',
+    notice_analyzer: 'document_analysis',
+    draft_rti_complaint: 'chat_messages',
+    deadline_planner: 'automation_runs',
+    portal_form_prep: 'chat_messages',
+    fraud_signal_analyzer: 'chat_messages',
+  };
+
+  const getActionCopy = (actionId) => actionCopyMap[actionId] || {};
+  const getActionMetric = (actionId) => actionMetricMap[actionId] || null;
 
   const getMetricLabel = (metricKey) => {
     return {
@@ -260,27 +245,209 @@ function ChatInterface() {
     return limit <= 0 || remaining <= 0 || Boolean(metric.exhausted);
   };
 
-  const isToolLocked = (tool) => {
-    if (!tool.metric) return false;
-    return isMetricLocked(tool.metric);
+  const isActionLocked = (action) => {
+    const metricKey = getActionMetric(action.id);
+    if (!metricKey) return false;
+    return isMetricLocked(metricKey);
   };
 
-  const getToolQuotaBadge = (tool) => {
-    if (!tool.metric) return null;
-    const metric = getMetricSnapshot(tool.metric);
+  const getActionQuotaBadge = (action) => {
+    const metricKey = getActionMetric(action.id);
+    if (!metricKey) return null;
+    const metric = getMetricSnapshot(metricKey);
     if (!metric) {
-      return { label: 'Checking quota...', className: 'bg-muted text-muted-foreground' };
+      return {
+        metricLabel: getMetricLabel(metricKey),
+        label: 'Checking quota...',
+        className: 'bg-muted text-muted-foreground'
+      };
     }
 
     const limit = Number(metric.limit ?? 0);
     const remaining = Number(metric.remaining ?? 0);
     if (limit <= 0) {
-      return { label: 'Locked on plan', className: 'bg-muted text-muted-foreground' };
+      return {
+        metricLabel: getMetricLabel(metricKey),
+        label: 'Locked on plan',
+        className: 'bg-muted text-muted-foreground'
+      };
     }
     if (remaining <= 0 || Boolean(metric.exhausted)) {
-      return { label: `0 left this month`, className: 'bg-destructive/10 text-destructive' };
+      return {
+        metricLabel: getMetricLabel(metricKey),
+        label: '0 left this month',
+        className: 'bg-destructive/10 text-destructive'
+      };
     }
-    return { label: `${remaining} left this month`, className: 'bg-primary/10 text-primary' };
+    return {
+      metricLabel: getMetricLabel(metricKey),
+      label: `${remaining} left this month`,
+      className: 'bg-primary/10 text-primary'
+    };
+  };
+
+  const resetActionDialog = () => {
+    setActiveAction(null);
+    setActionFormValues({});
+    setActionFormFiles({});
+    setActionFormError('');
+    setActionFileInputVersion((prev) => prev + 1);
+  };
+
+  const openActionDialog = (action) => {
+    if (isActionLocked(action)) {
+      navigate('/billing');
+      return;
+    }
+
+    const defaults = {};
+    (action?.dialog?.fields || []).forEach((field) => {
+      if (field.default !== undefined) {
+        defaults[field.id] = field.default;
+      }
+    });
+
+    setActiveAction(action);
+    setActionFormValues(defaults);
+    setActionFormFiles({});
+    setActionFormError('');
+    setActionFileInputVersion((prev) => prev + 1);
+  };
+
+  const closeActionDialog = () => {
+    resetActionDialog();
+  };
+
+  const updateActionFieldValue = (fieldId, value) => {
+    setActionFormValues((prev) => ({ ...prev, [fieldId]: value }));
+  };
+
+  const updateActionFieldFile = (fieldId, file) => {
+    setActionFormFiles((prev) => ({ ...prev, [fieldId]: file || null }));
+  };
+
+  const getActionFieldDefinition = (action, fieldId) => {
+    return (action?.dialog?.fields || []).find((field) => field.id === fieldId);
+  };
+
+  const getActionFieldStringValue = (action, fieldId) => {
+    const field = getActionFieldDefinition(action, fieldId);
+    if (!field) return '';
+    if (field.type === 'file') {
+      return actionFormFiles[fieldId]?.name || '';
+    }
+    const raw = actionFormValues[fieldId];
+    if (raw === undefined || raw === null) return '';
+    return String(raw).trim();
+  };
+
+  const hasActionValue = (action, fieldId) => {
+    return getActionFieldStringValue(action, fieldId).length > 0;
+  };
+
+  const validateActionForm = (action) => {
+    const requiredFields = action?.validation?.required || [];
+    const missingRequired = requiredFields.some((fieldId) => !hasActionValue(action, fieldId));
+    if (missingRequired) {
+      return commonCopy.validation_required || 'Please fill all required fields.';
+    }
+
+    const anyOfGroups = action?.validation?.any_of || [];
+    for (const group of anyOfGroups) {
+      const anyPresent = group.some((fieldId) => hasActionValue(action, fieldId));
+      if (!anyPresent) {
+        return commonCopy.validation_any_of || 'Please provide at least one of the required inputs.';
+      }
+    }
+    return '';
+  };
+
+  const composeActionPrompt = (action) => {
+    const sections = [];
+    const separator = composeConfig.section_separator || '\n';
+    const preface = ACTION_HUB_COPY.chat_preface_templates?.[action.id];
+    if (preface) {
+      sections.push(preface);
+    }
+
+    const promptSections = action?.prompt?.sections || [];
+    for (const section of promptSections) {
+      const placeholderMatches = [...section.matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)];
+      let omitLine = false;
+      let rendered = section;
+
+      for (const [, placeholderKey] of placeholderMatches) {
+        const field = getActionFieldDefinition(action, placeholderKey);
+        const value = getActionFieldStringValue(action, placeholderKey);
+        if (!value && field?.omit_if_empty) {
+          omitLine = true;
+          break;
+        }
+        rendered = rendered.replace(new RegExp(`{{\\s*${placeholderKey}\\s*}}`, 'g'), value || 'Not provided');
+      }
+
+      if (omitLine) {
+        continue;
+      }
+      if (placeholderMatches.length > 0 && rendered.trim() === 'Not provided' && section.trim().startsWith('{{')) {
+        continue;
+      }
+      sections.push(rendered);
+    }
+
+    const uploadedFiles = Object.entries(actionFormFiles).filter(([, file]) => file);
+    if (uploadedFiles.length > 0) {
+      sections.push('');
+      sections.push('Uploaded Files:');
+      uploadedFiles.forEach(([, file]) => {
+        sections.push(`- ${file.name}`);
+      });
+    }
+
+    const responseFormatItems = action?.prompt?.response_format || [];
+    if (responseFormatItems.length > 0) {
+      sections.push('');
+      sections.push(composeConfig.response_format_prefix || 'Response format:');
+      responseFormatItems.forEach((item) => {
+        sections.push(`${composeConfig.response_format_bullet_prefix || '- '}${item}`);
+      });
+    }
+
+    const prompt = sections.join(separator).replace(/\n{3,}/g, '\n\n').trim();
+    return prompt;
+  };
+
+  const submitActionDialog = async () => {
+    if (!activeAction) return;
+
+    const validationMessage = validateActionForm(activeAction);
+    if (validationMessage) {
+      setActionFormError(validationMessage);
+      return;
+    }
+
+    setActionFormError('');
+    const prompt = composeActionPrompt(activeAction);
+    let success = true;
+    if (submitBehavior.send_to_chat) {
+      success = await handleSendMessage(prompt);
+    }
+
+    if (submitBehavior.close_dialog_on_submit) {
+      closeActionDialog();
+    }
+    if (submitBehavior.reset_form_on_submit && !submitBehavior.close_dialog_on_submit) {
+      setActionFormValues({});
+      setActionFormFiles({});
+      setActionFileInputVersion((prev) => prev + 1);
+    }
+
+    setActionToast({
+      tone: success ? 'success' : 'error',
+      message: success
+        ? (commonCopy.toast_success || 'Structured query sent to chat.')
+        : (commonCopy.toast_error || 'Could not submit this workflow. Please review your inputs.'),
+    });
   };
 
   const extractQuotaError = (error) => {
@@ -719,13 +886,13 @@ function ChatInterface() {
 
   const handleSendMessage = async (messageOverride = null) => {
     // If file is selected, do document analysis instead
-    if (selectedFile) {
+    if (!messageOverride && selectedFile) {
       await handleDocumentAnalysis();
-      return;
+      return true;
     }
     
     const messageToSend = (messageOverride ?? inputMessage).trim();
-    if (!messageToSend) return;
+    if (!messageToSend) return false;
 
     const userMessage = messageToSend;
     
@@ -760,13 +927,15 @@ function ChatInterface() {
       }
 
       await fetchBillingStatus();
+      return true;
 
     } catch (error) {
       // Remove optimistic user message on error
       setMessages(prev => prev.slice(0, -1));
       const handled = await handleQuotaError(error);
-      if (handled) return;
+      if (handled) return false;
       console.error('Chat error:', error);
+      return false;
     } finally {
       setIsLoading(false);
     }
@@ -805,14 +974,6 @@ function ChatInterface() {
       e.preventDefault();
       handleSendMessage();
     }
-  };
-
-  const handleToolClick = async (tool) => {
-    if (isToolLocked(tool)) {
-      navigate('/billing');
-      return;
-    }
-    await handleSendMessage(tool.prompt);
   };
 
   const handleFileSelect = (e) => {
@@ -1366,6 +1527,18 @@ function ChatInterface() {
         {/* Messages Area - Fixed Height, Scrollable */}
         <div className="flex-1 overflow-y-auto p-4 min-h-0">
           <div className="max-w-4xl mx-auto space-y-4">
+            {actionToast && (
+              <div
+                className={`rounded-lg border p-3 text-sm ${
+                  actionToast.tone === 'success'
+                    ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : 'border-destructive/40 bg-destructive/10 text-destructive'
+                }`}
+              >
+                {actionToast.message}
+              </div>
+            )}
+
             {messages.length === 0 && (
               <div className="text-center py-10">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1373,38 +1546,70 @@ function ChatInterface() {
                 </div>
                 <h2 className="text-xl font-bold text-foreground mb-2">Start a conversation</h2>
                 <p className="text-muted-foreground">Ask me anything about government services</p>
-                <div className="mt-6 w-full max-w-4xl mx-auto">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-left">
-                    {toolCards.map((tool) => {
-                      const locked = isToolLocked(tool);
-                      const quotaBadge = getToolQuotaBadge(tool);
+                <div className="mt-6 w-full max-w-5xl mx-auto rounded-2xl border border-border bg-card/70 p-4 sm:p-6 text-left">
+                  <div className="mb-4">
+                    <h3 className="text-lg sm:text-xl font-bold text-foreground">
+                      {ACTION_HUB_COPY.action_hub_copy.title}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {ACTION_HUB_COPY.action_hub_copy.subtitle}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {ACTION_HUB_COPY.action_hub_copy.helper_note}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {actionModules.map((action) => {
+                      const copy = getActionCopy(action.id);
+                      const locked = isActionLocked(action);
+                      const quotaBadge = getActionQuotaBadge(action);
                       return (
-                        <button
-                          key={tool.id}
-                          onClick={() => handleToolClick(tool)}
-                          className={`p-4 rounded-xl border transition-all ${
+                        <div
+                          key={action.id}
+                          className={`rounded-xl border p-4 transition-all ${
                             locked
-                              ? 'border-border bg-muted/60 opacity-90'
+                              ? 'border-border bg-muted/60'
                               : 'border-border bg-card hover:border-primary/40 hover:shadow-sm'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-foreground">{tool.title}</p>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">
+                              {(action.icon || 'AC').replace('Icon', '').slice(0, 2).toUpperCase()}
+                            </div>
                             {locked && <span className="text-xs text-muted-foreground">Upgrade</span>}
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1">{tool.description}</p>
+
+                          <h4 className="text-sm font-semibold text-foreground mt-3">
+                            {copy.card_title || action.title}
+                          </h4>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {copy.card_description || action.description}
+                          </p>
+
                           {quotaBadge && (
-                            <div className="mt-2 flex items-center justify-between gap-2">
-                              <span className="text-[11px] text-muted-foreground">{getMetricLabel(tool.metric)}</span>
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                              <span className="text-[11px] text-muted-foreground">{quotaBadge.metricLabel}</span>
                               <span className={`text-[11px] px-2 py-1 rounded-full ${quotaBadge.className}`}>
                                 {quotaBadge.label}
                               </span>
                             </div>
                           )}
-                        </button>
+
+                          <button
+                            onClick={() => openActionDialog(action)}
+                            className="mt-4 w-full rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                          >
+                            {commonCopy.open_button || 'Open'}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
+
+                  <p className="text-[11px] text-muted-foreground mt-4">
+                    {commonCopy.disclaimer}
+                  </p>
                 </div>
               </div>
             )}
@@ -1685,6 +1890,113 @@ function ChatInterface() {
           </div>
         </div>
       </div>
+
+      {activeAction && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-border bg-card p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold text-foreground">
+                  {getActionCopy(activeAction.id).dialog_title || activeAction.dialog?.title || activeAction.title}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {getActionCopy(activeAction.id).dialog_intro || activeAction.description}
+                </p>
+              </div>
+              <button
+                onClick={closeActionDialog}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                {commonCopy.cancel_button || 'Cancel'}
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {(activeAction.dialog?.fields || []).map((field) => {
+                const label = `${field.label}${field.required ? (commonCopy.required_suffix || '*') : ''}`;
+                const currentValue = field.type === 'file'
+                  ? ''
+                  : (actionFormValues[field.id] ?? '');
+                return (
+                  <div key={field.id}>
+                    <label className="block text-sm font-medium text-foreground mb-1">
+                      {label}
+                    </label>
+
+                    {field.type === 'select' && (
+                      <select
+                        value={currentValue}
+                        onChange={(e) => updateActionFieldValue(field.id, e.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      >
+                        <option value="">Select...</option>
+                        {(field.options || []).map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {field.type === 'textarea' && (
+                      <textarea
+                        value={currentValue}
+                        onChange={(e) => updateActionFieldValue(field.id, e.target.value)}
+                        placeholder={field.placeholder || ''}
+                        className="w-full min-h-[90px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      />
+                    )}
+
+                    {(field.type === 'text' || field.type === 'date') && (
+                      <input
+                        type={field.type}
+                        value={currentValue}
+                        onChange={(e) => updateActionFieldValue(field.id, e.target.value)}
+                        maxLength={field.max_length || undefined}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      />
+                    )}
+
+                    {field.type === 'file' && (
+                      <div className="space-y-1">
+                        <input
+                          key={`${field.id}-${actionFileInputVersion}`}
+                          type="file"
+                          accept={Array.isArray(field.accept) ? field.accept.join(',') : undefined}
+                          onChange={(e) => updateActionFieldFile(field.id, e.target.files?.[0] || null)}
+                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-primary"
+                        />
+                        {actionFormFiles[field.id]?.name && (
+                          <p className="text-xs text-muted-foreground">Selected: {actionFormFiles[field.id].name}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {actionFormError && (
+              <p className="mt-4 text-sm text-destructive">{actionFormError}</p>
+            )}
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                onClick={closeActionDialog}
+                className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-accent transition-colors"
+              >
+                {commonCopy.cancel_button || 'Cancel'}
+              </button>
+              <button
+                onClick={submitActionDialog}
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                {activeAction.dialog?.submit_label || commonCopy.submit_button || 'Generate Query & Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
