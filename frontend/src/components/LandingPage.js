@@ -49,12 +49,13 @@ function LandingPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button
               onClick={handleLogin}
-              className="btn-primary px-8 py-4 text-white rounded-lg font-semibold text-lg shadow-lg"
+              className="btn-primary px-8 py-4 text-white rounded-xl font-semibold text-lg shadow-lg flex items-center gap-2"
               data-testid="hero-get-started-btn"
             >
-              Get Started Free →
+              <span>💬</span>
+              <span>Start Chatting Now →</span>
             </button>
-            <button className="px-8 py-4 bg-white text-gray-700 rounded-lg font-semibold text-lg hover:bg-gray-50 transition-colors border border-gray-200">
+            <button className="px-8 py-4 bg-white text-gray-700 rounded-xl font-semibold text-lg hover:bg-gray-50 transition-colors border border-gray-200">
               Watch Demo
             </button>
           </div>
