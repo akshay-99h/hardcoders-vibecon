@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { 
   HiPlus, HiTrash, HiMenu, HiSun, HiMoon,
   HiPaperClip, HiMicrophone, HiPaperAirplane,
-  HiChatAlt2, HiLogout, HiVolumeUp, HiClipboardCopy, HiCheck
+  HiChatAlt2, HiLogout, HiVolumeUp, HiClipboardCopy, HiCheck, HiPhone
 } from 'react-icons/hi';
 import api from '../utils/api';
 
@@ -712,6 +712,14 @@ function ChatInterface() {
                 title="Upload document (legal notice, certificate, etc.)"
               >
                 <HiPaperClip size={20} />
+              </button>
+
+              <button
+                onClick={() => navigate('/call', { state: { conversationId: currentConversation } })}
+                className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
+                title="Start AI voice call"
+              >
+                <HiPhone size={20} />
               </button>
 
               <button
