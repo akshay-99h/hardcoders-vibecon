@@ -296,7 +296,7 @@ function ChatInterface() {
             {messages.length === 0 && (
               <div className="text-center py-12">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Icon name="message-01" size={32} className="text-primary" />
+                  <HiChatAlt2 size={32} className="text-primary" />
                 </div>
                 <h2 className="text-xl font-bold text-foreground mb-2">Start a conversation</h2>
                 <p className="text-muted-foreground">Ask me anything about government services</p>
