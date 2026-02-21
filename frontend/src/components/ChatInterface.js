@@ -481,10 +481,9 @@ function ChatInterface() {
       mediaRecorderRef.current.stop();
     }
     
-    // Stop audio playback if active
-    if (voiceAudioRef.current) {
-      voiceAudioRef.current.pause();
-      voiceAudioRef.current = null;
+    // Stop browser speech synthesis if active
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
     }
     
     // Release microphone
