@@ -46,17 +46,17 @@ function LandingPage() {
 
   const features = [
     {
-      icon: <SecurityCheckIcon size={24} />,
+      icon: <HiShieldCheck className="w-6 h-6" />,
       title: "Secure & Private",
       description: "Your data is encrypted and never shared"
     },
     {
-      icon: <Sparkles01Icon size={24} />,
+      icon: <HiSparkles className="w-6 h-6" />,
       title: "AI-Powered",
       description: "Advanced AI to simplify complex processes"
     },
     {
-      icon: <Tick02Icon size={24} />,
+      icon: <HiCheckCircle className="w-6 h-6" />,
       title: "Easy to Use",
       description: "Step-by-step guidance for every task"
     }
