@@ -129,7 +129,7 @@ function LandingPage() {
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <HiShieldCheck className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-bold text-primary">Raksha AI</span>
+            <span className="text-2xl font-bold text-primary">HardCoders</span>
           </div>
         </motion.div>
 
@@ -165,6 +165,7 @@ function LandingPage() {
             <Button
               variant="outline"
               size="lg"
+              onClick={() => window.location.href = '/how-it-works'}
             >
               See How It Works
             </Button>
@@ -209,10 +210,10 @@ function LandingPage() {
           className="mt-20 flex flex-col items-center gap-3"
         >
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <button className="hover:text-foreground transition-colors">Terms of Service</button>
-            <button className="hover:text-foreground transition-colors">Privacy Policy</button>
+            <button onClick={() => window.location.href = '/terms'} className="hover:text-foreground transition-colors">Terms of Service</button>
+            <button onClick={() => window.location.href = '/privacy'} className="hover:text-foreground transition-colors">Privacy Policy</button>
           </div>
-          <p className="text-sm text-muted-foreground">© 2024 Raksha AI</p>
+          <p className="text-sm text-muted-foreground">© 2026 HardCoders</p>
         </motion.div>
       </div>
     </div>
