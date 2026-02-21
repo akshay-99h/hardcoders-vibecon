@@ -161,6 +161,43 @@
 
 ---
 
+## Backend Tests
+
+### Test 8: Context Integration - Knowledge Base Context Service
+- **Task**: Verify ContextService loads JSON knowledge files and provides relevant context to chat responses
+- **Implemented**: true
+- **Working**: pending_full_e2e_test
+- **Files**: /app/backend/services/context_service.py, /app/backend/server.py, /app/backend/agents/problem_understanding_agent.py
+- **Stuck Count**: 0
+- **Priority**: critical
+- **Needs Retesting**: true
+
+**Status History**:
+- **Working**: Unit test passed, E2E test pending
+- **Agent**: main
+- **Comment**: ✅ ContextService unit tests PASSED:
+  - Successfully loads 5 JSON context files on startup
+  - Files loaded: government_services.json, legal_rights.json, financial_services.json, privacy_safety.json, grievance_redressal.json
+  - Keyword matching working correctly:
+    * "Aadhaar" query → matches government_services (portals, helplines, general rules)
+    * "PAN card" query → matches government_services
+    * "consumer complaint" query → matches legal_rights
+    * "arrest" query → matches legal_rights
+    * "passport" query → matches government_services
+    * Unrelated queries → no match (correct behavior)
+  - Context formatting produces structured prompts with portals, helplines, rules, and procedures
+  - Average context length: ~700-2200 characters per match
+  
+  ⚠️ PENDING: Full E2E test with authenticated user to verify:
+  - Context is properly injected into LLM prompts
+  - AI responses utilize the knowledge base information
+  - Official portal URLs and helplines are referenced in responses
+  - Multi-turn conversations maintain context accuracy
+
+**Next Steps**: Use backend testing agent for comprehensive E2E testing with authentication
+
+---
+
 ## Metadata
 
 - **Created By**: testing_agent
