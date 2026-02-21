@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 import os
 import uuid
+import base64
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
@@ -16,6 +17,8 @@ load_dotenv()
 from config.settings import settings
 from agents.problem_understanding_agent import ProblemUnderstandingAgent
 from services.voice_service import VoiceService
+from services.context_service import ContextService
+from services.vision_service import VisionService
 
 # Helper function to serialize datetime objects
 def serialize_doc(doc):
@@ -54,6 +57,15 @@ db = mongo_client.get_database()
 # Initialize services
 voice_service = VoiceService()
 chat_agent = ProblemUnderstandingAgent()
+context_service = ContextService()
+vision_service = VisionService()
+
+# Load context files on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    print("Loading knowledge base context files...")
+    context_service.load_context_files()
 
 # Pydantic Models
 class ChatMessage(BaseModel):
@@ -234,23 +246,39 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
     await db.messages.insert_one(user_message_doc)
     
     # Get conversation history if needed
-    context = ""
+    conversation_context = ""
+    document_context = ""
+    
     if chat_message.includeContext:
         messages = []
         async for msg in db.messages.find(
             {"conversation_id": conversation_id},
             {"_id": 0}
-        ).sort("timestamp", 1).limit(10):
+        ).sort("timestamp", 1).limit(20):
             messages.append(msg)
         
         if len(messages) > 1:
-            context = "\n".join([f"{m['role']}: {m['content']}" for m in messages[:-1]])
+            # Separate document context from regular conversation
+            regular_messages = []
+            for m in messages[:-1]:  # Exclude current user message
+                if m.get("is_document_context"):
+                    # Extract document context for better AI understanding
+                    document_context = m.get("content", "")
+                else:
+                    regular_messages.append(f"{m['role']}: {m['content']}")
+            
+            conversation_context = "\n".join(regular_messages)
+    
+    # Get knowledge base context for the user's query
+    knowledge_context = context_service.get_context_for_query(chat_message.message)
     
     # Get AI response
     try:
         result = await chat_agent.process({
             "user_input": chat_message.message,
-            "previous_context": context
+            "previous_context": conversation_context,
+            "knowledge_context": knowledge_context,
+            "document_context": document_context  # Pass document context if available
         })
         
         # Handle different response types
@@ -390,6 +418,210 @@ async def synthesize_speech(request: Request, authorization: Optional[str] = Hea
         return {"audio_base64": audio_base64}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============== DOCUMENT ANALYSIS ENDPOINTS ==============
+
+@app.post("/api/documents/analyze")
+async def analyze_document(
+    file: UploadFile = File(...),
+    query: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    store_document: bool = False,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Analyze a legal document image using OCR and AI"""
+    user = await get_current_user(authorization, request)
+    
+    # Check file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported file type. Allowed: JPEG, PNG, WEBP, PDF"
+        )
+    
+    # Check file size (10MB limit)
+    file_content = await file.read()
+    if len(file_content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
+    
+    try:
+        # Handle PDF files differently - convert to image
+        if file.content_type == "application/pdf":
+            from pdf2image import convert_from_bytes
+            from PIL import Image
+            import io
+            
+            # Convert PDF to images (first page only)
+            images = convert_from_bytes(file_content, first_page=1, last_page=1)
+            
+            if not images:
+                raise HTTPException(status_code=400, detail="Could not extract image from PDF")
+            
+            # Convert PIL Image to base64
+            img = images[0]
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0)
+            image_base64 = base64.b64encode(img_byte_arr.read()).decode('utf-8')
+        else:
+            # For image files, directly convert to base64
+            image_base64 = base64.b64encode(file_content).decode('utf-8')
+        
+        # Analyze the document
+        result = await vision_service.analyze_legal_document(
+            image_base64=image_base64,
+            user_query=query
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message", "Analysis failed"))
+        
+        # Get or create conversation for document context
+        if not conversation_id:
+            conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
+            conversation_doc = {
+                "conversation_id": conversation_id,
+                "user_id": user["user_id"],
+                "title": f"Document: {file.filename}",
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
+            }
+            await db.conversations.insert_one(conversation_doc)
+        
+        # Save document context message - allows follow-up questions
+        document_context_msg = {
+            "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+            "conversation_id": conversation_id,
+            "role": "system",
+            "content": f"[DOCUMENT CONTEXT - {file.filename}]\n\n{result['analysis']}",
+            "timestamp": datetime.now(timezone.utc),
+            "is_document_context": True,
+            "document_filename": file.filename
+        }
+        await db.messages.insert_one(document_context_msg)
+        
+        # If user asked a question, save it and answer as messages
+        if query:
+            user_msg = {
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "conversation_id": conversation_id,
+                "role": "user",
+                "content": f"📄 {file.filename}: {query}",
+                "timestamp": datetime.now(timezone.utc)
+            }
+            await db.messages.insert_one(user_msg)
+            
+            assistant_msg = {
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "conversation_id": conversation_id,
+                "role": "assistant",
+                "content": result["analysis"],
+                "timestamp": datetime.now(timezone.utc)
+            }
+            await db.messages.insert_one(assistant_msg)
+        
+        # Update conversation timestamp
+        await db.conversations.update_one(
+            {"conversation_id": conversation_id},
+            {"$set": {"updated_at": datetime.now(timezone.utc)}}
+        )
+        
+        # Optionally store document metadata (NOT the full file for privacy)
+        document_id = None
+        if store_document:
+            doc_record = {
+                "document_id": f"doc_{uuid.uuid4().hex[:12]}",
+                "user_id": user["user_id"],
+                "conversation_id": conversation_id,
+                "filename": file.filename,
+                "file_type": file.content_type,
+                "file_size": len(file_content),
+                "analysis_summary": result["analysis"][:500] + "..." if len(result["analysis"]) > 500 else result["analysis"],
+                "query": query,
+                "analyzed_at": datetime.now(timezone.utc)
+            }
+            await db.documents.insert_one(doc_record)
+            document_id = doc_record["document_id"]
+        
+        return {
+            "success": True,
+            "analysis": result["analysis"],
+            "model_used": result["model_used"],
+            "conversation_id": conversation_id,
+            "document_id": document_id,
+            "stored": store_document
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Document analysis error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to analyze document: {str(e)}")
+
+@app.post("/api/documents/ocr")
+async def extract_text_from_document(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Extract text from document image (OCR only)"""
+    user = await get_current_user(authorization, request)
+    
+    # Check file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported file type. Allowed: JPEG, PNG, WEBP"
+        )
+    
+    try:
+        file_content = await file.read()
+        image_base64 = base64.b64encode(file_content).decode('utf-8')
+        
+        result = await vision_service.extract_text_only(image_base64)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail="OCR failed")
+        
+        return {
+            "success": True,
+            "text": result["extracted_text"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"OCR error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to extract text")
+
+@app.get("/api/documents/history")
+async def get_document_history(
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Get user's document analysis history"""
+    user = await get_current_user(authorization, request)
+    
+    try:
+        documents = []
+        async for doc in db.documents.find(
+            {"user_id": user["user_id"]},
+            {"_id": 0}
+        ).sort("analyzed_at", -1).limit(50):
+            documents.append(serialize_doc(doc))
+        
+        return {
+            "success": True,
+            "documents": documents
+        }
+    except Exception as e:
+        print(f"Error fetching document history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch document history")
 
 # ============== HEALTH CHECK ==============
 

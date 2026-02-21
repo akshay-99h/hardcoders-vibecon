@@ -27,7 +27,7 @@ REACT_APP_BACKEND_URL=
 
 **Frontend Request Flow:**
 1. Frontend makes request to `/api/missions` (relative URL)
-2. Browser sends to same domain (e.g., `https://india-govt-chat.preview.emergentagent.com/api/missions`)
+2. Browser sends to same domain (e.g., `https://raksha-india-gov.preview.emergentagent.com/api/missions`)
 3. Kubernetes ingress sees `/api` prefix
 4. Routes request to `backend:8001`
 5. Backend responds
@@ -35,7 +35,7 @@ REACT_APP_BACKEND_URL=
 
 **OAuth Flow:**
 1. User clicks "Sign In"
-2. Redirects to `https://auth.emergentagent.com/?redirect=https://india-govt-chat.preview.emergentagent.com/dashboard`
+2. Redirects to `https://auth.emergentagent.com/?redirect=https://raksha-india-gov.preview.emergentagent.com/dashboard`
 3. After Google auth, returns to your app's domain
 4. Frontend exchanges session_id for session_token via `/api/auth/session`
 5. Backend sets httpOnly cookie
@@ -45,7 +45,7 @@ REACT_APP_BACKEND_URL=
 
 ```bash
 # Test health endpoint
-curl https://india-govt-chat.preview.emergentagent.com/api/health
+curl https://raksha-india-gov.preview.emergentagent.com/api/health
 
 # Frontend should now be able to:
 # 1. Complete OAuth flow

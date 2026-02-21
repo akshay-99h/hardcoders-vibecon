@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { 
   HiPlus, HiTrash, HiMenu, HiSun, HiMoon,
   HiPaperClip, HiMicrophone, HiPaperAirplane,
-  HiChatAlt2, HiLogout
+  HiChatAlt2, HiLogout, HiVolumeUp, HiClipboardCopy, HiCheck
 } from 'react-icons/hi';
 import api from '../utils/api';
 
@@ -17,17 +17,29 @@ function ChatInterface() {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState('en'); // Language for STT
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState(null);
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
-    checkAuth();
-    fetchConversations();
+    handleAuthCallback();
+    
+    // Cleanup speech synthesis on unmount
+    return () => {
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -42,11 +54,56 @@ function ChatInterface() {
     scrollToBottom();
   }, [messages]);
 
+  const handleAuthCallback = async () => {
+    setIsAuthenticating(true);
+    
+    // Check if there's a session_id in the URL hash (OAuth callback)
+    const hash = window.location.hash;
+    if (hash && hash.includes('session_id')) {
+      try {
+        const params = new URLSearchParams(hash.substring(1));
+        const sessionId = params.get('session_id');
+        
+        if (sessionId) {
+          console.log('Processing OAuth callback with session_id');
+          
+          // Exchange session_id for session_token
+          const response = await api.post('/api/auth/session', {
+            session_id: sessionId,
+          });
+          
+          const userData = response.data;
+          setUser(userData);
+          
+          // Clear the hash from URL
+          window.history.replaceState(null, '', window.location.pathname);
+          
+          // Fetch conversations after successful auth
+          await fetchConversations();
+          setIsAuthenticating(false);
+          console.log('Authentication successful');
+          return;
+        }
+      } catch (error) {
+        console.error('Auth callback error:', error);
+        setIsAuthenticating(false);
+        navigate('/');
+        return;
+      }
+    }
+    
+    // If no session_id in URL, check existing auth
+    await checkAuth();
+    setIsAuthenticating(false);
+  };
+
   const checkAuth = async () => {
     try {
       const response = await api.get('/api/auth/me');
       setUser(response.data);
+      await fetchConversations();
     } catch (error) {
+      console.error('Auth check failed:', error);
       navigate('/');
     }
   };
@@ -125,6 +182,12 @@ function ChatInterface() {
   };
 
   const handleSendMessage = async () => {
+    // If file is selected, do document analysis instead
+    if (selectedFile) {
+      await handleDocumentAnalysis();
+      return;
+    }
+    
     if (!inputMessage.trim()) return;
 
     const userMessage = inputMessage.trim();
@@ -201,6 +264,220 @@ function ChatInterface() {
       handleSendMessage();
     }
   };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Check file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Please upload a valid image (JPEG, PNG, WEBP) or PDF file');
+        return;
+      }
+      
+      // Check file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('File size exceeds 10MB limit');
+        return;
+      }
+      
+      setSelectedFile(file);
+    }
+  };
+
+  const handleDocumentAnalysis = async () => {
+    if (!selectedFile) return;
+    
+    setIsAnalyzing(true);
+    setIsLoading(true);
+    
+    try {
+      // Add a system message indicating analysis is in progress
+      const userMsg = {
+        role: 'user',
+        content: `📄 Analyzing document: ${selectedFile.name}...`,
+        timestamp: new Date().toISOString(),
+        isDocument: true
+      };
+      setMessages(prev => [...prev, userMsg]);
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      if (inputMessage.trim()) {
+        formData.append('query', inputMessage.trim());
+      }
+      // Pass current conversation ID so follow-up questions work
+      if (currentConversation) {
+        formData.append('conversation_id', currentConversation);
+      }
+      
+      // Call analysis API
+      const response = await api.post('/api/documents/analyze', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      // Update conversation ID if this was a new conversation
+      if (response.data.conversation_id && !currentConversation) {
+        setCurrentConversation(response.data.conversation_id);
+        fetchConversations(); // Refresh sidebar
+      }
+      
+      // Add AI analysis response
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response.data.analysis,
+        timestamp: new Date().toISOString(),
+        isDocumentAnalysis: true
+      }]);
+      
+      // Clear file and input
+      setSelectedFile(null);
+      setInputMessage('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
+    } catch (error) {
+      console.error('Document analysis error:', error);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '❌ Failed to analyze document. Please ensure the image is clear and try again.',
+        timestamp: new Date().toISOString()
+      }]);
+    } finally {
+      setIsAnalyzing(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleTextToSpeech = (message) => {
+    // Stop any ongoing speech
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    // Clean the text for better speech
+    let cleanText = message.content;
+    
+    // Remove emojis
+    cleanText = cleanText.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
+    cleanText = cleanText.replace(/[\u{1F300}-\u{1F5FF}]/gu, ''); // Symbols & Pictographs
+    cleanText = cleanText.replace(/[\u{1F680}-\u{1F6FF}]/gu, ''); // Transport & Map
+    cleanText = cleanText.replace(/[\u{1F700}-\u{1F77F}]/gu, ''); // Alchemical
+    cleanText = cleanText.replace(/[\u{1F780}-\u{1F7FF}]/gu, ''); // Geometric Shapes
+    cleanText = cleanText.replace(/[\u{1F800}-\u{1F8FF}]/gu, ''); // Supplemental Arrows
+    cleanText = cleanText.replace(/[\u{1F900}-\u{1F9FF}]/gu, ''); // Supplemental Symbols
+    cleanText = cleanText.replace(/[\u{1FA00}-\u{1FA6F}]/gu, ''); // Chess Symbols
+    cleanText = cleanText.replace(/[\u{1FA70}-\u{1FAFF}]/gu, ''); // Symbols and Pictographs Extended-A
+    cleanText = cleanText.replace(/[\u{2600}-\u{26FF}]/gu, '');   // Miscellaneous Symbols
+    cleanText = cleanText.replace(/[\u{2700}-\u{27BF}]/gu, '');   // Dingbats
+    cleanText = cleanText.replace(/[\u{FE00}-\u{FE0F}]/gu, '');   // Variation Selectors
+    cleanText = cleanText.replace(/[\u{1F1E0}-\u{1F1FF}]/gu, ''); // Flags
+    
+    // Remove markdown formatting
+    cleanText = cleanText.replace(/(\*\*|__)(.*?)\1/g, '$2'); // Bold
+    cleanText = cleanText.replace(/(\*|_)(.*?)\1/g, '$2');     // Italic
+    cleanText = cleanText.replace(/`([^`]+)`/g, '$1');         // Code
+    cleanText = cleanText.replace(/^#+\s/gm, '');              // Headers
+    cleanText = cleanText.replace(/^\s*[-*+]\s/gm, '');        // List bullets
+    cleanText = cleanText.replace(/^\s*\d+\.\s/gm, '');        // Numbered lists
+    
+    // Remove multiple spaces and trim
+    cleanText = cleanText.replace(/\s+/g, ' ').trim();
+    
+    if (!cleanText) return;
+    
+    // Check if text has exclamation marks for emphasis
+    const hasEmphasis = cleanText.includes('!');
+    
+    // Detect language
+    const isHindi = /[\u0900-\u097F]/.test(cleanText);
+    
+    // Split by sentences for better emphasis handling
+    const sentences = cleanText.split(/([.!?]+\s+)/);
+    let currentIndex = 0;
+    
+    const speakNextSentence = () => {
+      if (currentIndex >= sentences.length) {
+        setSpeakingMessageId(null);
+        return;
+      }
+      
+      const sentence = sentences[currentIndex].trim();
+      if (!sentence || /^[.!?]+$/.test(sentence)) {
+        currentIndex++;
+        speakNextSentence();
+        return;
+      }
+      
+      const utterance = new SpeechSynthesisUtterance(sentence);
+      utterance.lang = isHindi ? 'hi-IN' : 'en-US';
+      
+      // Add emphasis if sentence has exclamation mark
+      if (sentence.includes('!')) {
+        utterance.rate = 0.9;    // Slightly slower for emphasis
+        utterance.pitch = 1.2;   // Higher pitch for excitement
+        utterance.volume = 1.0;  // Maximum volume
+      } else {
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 0.9;
+      }
+      
+      utterance.onend = () => {
+        currentIndex++;
+        speakNextSentence();
+      };
+      
+      utterance.onerror = () => {
+        setSpeakingMessageId(null);
+      };
+      
+      window.speechSynthesis.speak(utterance);
+    };
+    
+    // Track which message is being spoken
+    setSpeakingMessageId(message.timestamp);
+    speakNextSentence();
+  };
+
+  const handleCopyToClipboard = async (message) => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedMessageId(message.timestamp);
+      
+      // Reset after 2 seconds
+      setTimeout(() => {
+        setCopiedMessageId(null);
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
+  // Show loading screen while authenticating
+  if (isAuthenticating) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Authenticating...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-background flex overflow-hidden">
@@ -327,20 +604,50 @@ function ChatInterface() {
                 key={index}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
               >
-                <div
-                  className={`max-w-[85%] rounded-[1.4rem] px-5 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-card text-card-foreground border border-border'
-                  }`}
-                >
-                  {message.role === 'user' ? (
-                    <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
-                  ) : (
-                    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-card-foreground prose-strong:text-foreground prose-ul:text-card-foreground prose-ol:text-card-foreground prose-li:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-foreground">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {message.content}
-                      </ReactMarkdown>
+                <div className="flex flex-col gap-2 max-w-[85%]">
+                  <div
+                    className={`rounded-[1.4rem] px-5 py-3 ${
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-card text-card-foreground border border-border'
+                    }`}
+                  >
+                    {message.role === 'user' ? (
+                      <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                    ) : (
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-card-foreground prose-strong:text-foreground prose-ul:text-card-foreground prose-ol:text-card-foreground prose-li:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Action buttons for assistant messages */}
+                  {message.role === 'assistant' && (
+                    <div className="flex items-center gap-2 px-2">
+                      <button
+                        onClick={() => handleTextToSpeech(message)}
+                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                        title={speakingMessageId === message.timestamp ? "Stop speaking" : "Read aloud"}
+                      >
+                        <HiVolumeUp 
+                          size={16} 
+                          className={speakingMessageId === message.timestamp ? 'text-primary animate-pulse' : ''}
+                        />
+                      </button>
+                      
+                      <button
+                        onClick={() => handleCopyToClipboard(message)}
+                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                        title={copiedMessageId === message.timestamp ? "Copied!" : "Copy to clipboard"}
+                      >
+                        {copiedMessageId === message.timestamp ? (
+                          <HiCheck size={16} className="text-green-500" />
+                        ) : (
+                          <HiClipboardCopy size={16} />
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -365,44 +672,85 @@ function ChatInterface() {
 
         {/* Input Area - Fixed at Bottom */}
         <div className="bg-card border-t border-border p-4 flex-shrink-0">
-          <div className="max-w-4xl mx-auto flex items-end gap-2">
-            <button
-              className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
-              title="Attach file"
-            >
-              <HiPaperClip size={20} />
-            </button>
-
-            <button
-              onClick={isRecording ? handleStopRecording : handleStartRecording}
-              className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
-                isRecording
-                  ? 'bg-destructive text-destructive-foreground animate-pulse'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-              }`}
-            >
-              <HiMicrophone size={20} />
-            </button>
-
-            <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
-              <textarea
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Type your message..."
-                className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
-                rows={1}
-                style={{ maxHeight: '120px' }}
+          <div className="max-w-4xl mx-auto">
+            {/* File Preview */}
+            {selectedFile && (
+              <div className="mb-3 p-3 bg-muted rounded-lg flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center">
+                    <HiPaperClip className="text-primary" size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(selectedFile.size / 1024).toFixed(1)} KB • Ready to analyze
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleRemoveFile}
+                  className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
+                  title="Remove file"
+                >
+                  <HiTrash size={18} />
+                </button>
+              </div>
+            )}
+            
+            <div className="flex items-end gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+                onChange={handleFileSelect}
+                className="hidden"
               />
-            </div>
+              
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
+                title="Upload document (legal notice, certificate, etc.)"
+              >
+                <HiPaperClip size={20} />
+              </button>
 
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputMessage.trim() || isLoading}
-              className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
-            >
-              <HiPaperAirplane size={20} />
-            </button>
+              <button
+                onClick={isRecording ? handleStopRecording : handleStartRecording}
+                className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
+                  isRecording
+                    ? 'bg-destructive text-destructive-foreground animate-pulse'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+                title="Voice input"
+              >
+                <HiMicrophone size={20} />
+              </button>
+
+              <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
+                <textarea
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder={selectedFile ? "Add a question about the document (optional)..." : "Type your message..."}
+                  className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
+                  rows={1}
+                  style={{ maxHeight: '120px' }}
+                />
+              </div>
+
+              <button
+                onClick={handleSendMessage}
+                disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
+                className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                title={selectedFile ? "Analyze document" : "Send message"}
+              >
+                {isAnalyzing ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <HiPaperAirplane size={20} />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
