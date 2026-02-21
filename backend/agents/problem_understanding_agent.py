@@ -30,7 +30,8 @@ Be helpful, friendly, and concise. Focus on giving practical step-by-step instru
         Args:
             input_data: {
                 "user_input": "text from user",
-                "previous_context": "optional conversation context"
+                "previous_context": "optional conversation context",
+                "knowledge_context": "optional knowledge base context"
             }
         
         Returns:
@@ -38,6 +39,7 @@ Be helpful, friendly, and concise. Focus on giving practical step-by-step instru
         """
         user_input = input_data.get("user_input", "")
         previous_context = input_data.get("previous_context", "")
+        knowledge_context = input_data.get("knowledge_context", "")
         
         # Check for sensitive content (actual data sharing attempts)
         is_sensitive, detected = PrivacyGuard.detect_sensitive_content(user_input)
@@ -48,12 +50,27 @@ Be helpful, friendly, and concise. Focus on giving practical step-by-step instru
                 "detected": detected
             }
         
-        # Build prompt for helpful response
-        prompt = f"""User question: {user_input}
-
-{f'Previous conversation context: {previous_context}' if previous_context else ''}
-
-Provide a clear, helpful response with step-by-step guidance if applicable. 
+        # Build prompt for helpful response with knowledge context
+        prompt = ""
+        
+        # Add knowledge base context first (if available)
+        if knowledge_context:
+            prompt += f"{knowledge_context}\n\n"
+        
+        # Add conversation context (if available)
+        if previous_context:
+            prompt += f"Previous conversation:\n{previous_context}\n\n"
+        
+        # Add user's current question
+        prompt += f"User question: {user_input}\n\n"
+        
+        # Add instructions
+        if knowledge_context:
+            prompt += """Using the KNOWLEDGE BASE CONTEXT provided above, give a clear, accurate response with step-by-step guidance.
+Reference the official portals, helplines, and procedures mentioned in the context.
+Keep your response concise but complete, and ensure all information is factual and safe."""
+        else:
+            prompt += """Provide a clear, helpful response with step-by-step guidance if applicable.
 If the user is asking about creating/renewing documents like Aadhaar or PAN, provide the specific steps.
 Keep your response concise but complete."""
         
