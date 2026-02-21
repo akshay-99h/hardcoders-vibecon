@@ -224,6 +224,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Get or create user
     await get_or_create_user(chat_id, user.username or "", user.first_name)
     
+    # Check if user is responding to First Appeal offer
+    user_message_lower = user_message.lower().strip()
+    if user_message_lower in ['yes', '1', 'first appeal', 'appeal', 'generate appeal', 'generate first appeal']:
+        # Check if user has an overdue RTI
+        overdue_rti = await db.telegram_reminders.find_one({
+            "chat_id": chat_id,
+            "action_type": "rti",
+            "status": {"$in": ["pending", "sent"]}
+        }, sort=[("created_at", 1)])
+        
+        if overdue_rti:
+            # Check if it's actually overdue (>30 days)
+            days_since = (datetime.utcnow() - overdue_rti["created_at"]).days
+            if days_since > 30:
+                # Trigger First Appeal generation
+                await update.message.reply_text(
+                    "📝 *Generating First Appeal*\n\n"
+                    "I'll help you draft a First Appeal under Section 19(1) of RTI Act.\n\n"
+                    "Please provide the following details:",
+                    parse_mode='Markdown'
+                )
+                
+                # Ask for First Appeal details via chat agent
+                prompt = (
+                    f"User wants to generate a First Appeal for an overdue RTI application. "
+                    f"Please collect the following details:\n"
+                    f"1. User's full name and address\n"
+                    f"2. Original RTI filing date\n"
+                    f"3. Original RTI reference/receipt number (if any)\n"
+                    f"4. Department name where RTI was filed\n"
+                    f"5. First Appellate Authority name (or designation if unknown)\n"
+                    f"6. Information that was originally requested\n\n"
+                    f"Once you have all details, generate the First Appeal document using the template."
+                )
+                
+                user_message = prompt
+    
     # Process with chat agent
     chat_agent = ChatAgent()
     
