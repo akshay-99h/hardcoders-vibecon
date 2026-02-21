@@ -325,7 +325,7 @@ function ChatInterface() {
       
       audio.onended = () => {
         // Continue the conversation loop
-        if (isInVoiceMode) {
+        if (isInVoiceModeRef.current) {
           setVoiceState('listening');
           startVoiceListening();
         }
@@ -334,7 +334,7 @@ function ChatInterface() {
       audio.onerror = (e) => {
         console.error('Audio playback error:', e);
         // Continue even if audio fails
-        if (isInVoiceMode) {
+        if (isInVoiceModeRef.current) {
           setVoiceState('listening');
           startVoiceListening();
         }
