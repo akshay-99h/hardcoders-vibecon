@@ -243,7 +243,7 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
     await db.messages.insert_one(user_message_doc)
     
     # Get conversation history if needed
-    context = ""
+    conversation_context = ""
     if chat_message.includeContext:
         messages = []
         async for msg in db.messages.find(
@@ -253,13 +253,17 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
             messages.append(msg)
         
         if len(messages) > 1:
-            context = "\n".join([f"{m['role']}: {m['content']}" for m in messages[:-1]])
+            conversation_context = "\n".join([f"{m['role']}: {m['content']}" for m in messages[:-1]])
+    
+    # Get knowledge base context for the user's query
+    knowledge_context = context_service.get_context_for_query(chat_message.message)
     
     # Get AI response
     try:
         result = await chat_agent.process({
             "user_input": chat_message.message,
-            "previous_context": context
+            "previous_context": conversation_context,
+            "knowledge_context": knowledge_context
         })
         
         # Handle different response types
