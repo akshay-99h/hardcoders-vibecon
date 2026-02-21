@@ -65,14 +65,12 @@ function LandingPage() {
       </div>
 
       {/* RIGHT SIDE - Comic Strip Art (50%) */}
-      <div className="w-full md:w-1/2 bg-[#fdf6e3] flex items-center justify-center p-4 md:p-8">
-        <div className="w-full h-full flex items-center justify-center max-w-3xl">
-          <img 
-            src="/images/comic-strip.png" 
-            alt="Raksha AI - How it works: A story of getting help with legal notices" 
-            className="w-full h-auto object-contain"
-          />
-        </div>
+      <div className="w-full md:w-1/2 bg-[#fdf6e3] flex items-center justify-center">
+        <img 
+          src="/images/comic-strip.png" 
+          alt="Raksha AI - How it works: A story of getting help with legal notices" 
+          className="w-full h-full object-cover"
+        />
       </div>
     </div>
   );
