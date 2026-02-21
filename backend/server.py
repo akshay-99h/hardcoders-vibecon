@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Header, Response
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Header, Response, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
@@ -15,10 +15,12 @@ load_dotenv()
 
 # Import services and agents
 from config.settings import settings
-from agents.problem_understanding_agent import ProblemUnderstandingAgent
+from services.chat_agent import ChatAgent
 from services.voice_service import VoiceService
 from services.context_service import ContextService
 from services.vision_service import VisionService
+from services.ai_call_service import ai_call_service
+from services.pdf_generator import PDFGeneratorService
 
 # Helper function to serialize datetime objects
 def serialize_doc(doc):
@@ -56,7 +58,7 @@ db = mongo_client.get_database()
 
 # Initialize services
 voice_service = VoiceService()
-chat_agent = ProblemUnderstandingAgent()
+chat_agent = ChatAgent()
 context_service = ContextService()
 vision_service = VisionService()
 
@@ -438,7 +440,7 @@ async def analyze_document(
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=400, 
-            detail=f"Unsupported file type. Allowed: JPEG, PNG, WEBP, PDF"
+            detail="Unsupported file type. Allowed: JPEG, PNG, WEBP, PDF"
         )
     
     # Check file size (10MB limit)
@@ -576,7 +578,7 @@ async def extract_text_from_document(
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=400, 
-            detail=f"Unsupported file type. Allowed: JPEG, PNG, WEBP"
+            detail="Unsupported file type. Allowed: JPEG, PNG, WEBP"
         )
     
     try:
@@ -634,6 +636,206 @@ async def health_check():
 async def root():
     """Root endpoint"""
     return {"message": "Mission-Mode Platform API", "version": "1.0.0"}
+
+# ============== AI CALL ENDPOINTS ==============
+
+@app.post("/api/ai-call/start")
+async def start_ai_call(
+    request: Request,
+    authorization: Optional[str] = Header(None)
+):
+    """Start an AI voice call session"""
+    user = await get_current_user(authorization, request)
+    
+    body = await request.json()
+    conversation_id = body.get("conversation_id")
+    language = body.get("language", "en")
+    
+    # Create call session
+    call_id = ai_call_service.create_call_session(
+        user_id=user["user_id"],
+        conversation_id=conversation_id,
+        language=language
+    )
+    
+    return {
+        "call_id": call_id,
+        "language": language,
+        "message": "Call session started"
+    }
+
+
+@app.post("/api/ai-call/turn")
+async def process_call_turn(
+    call_id: str = None,
+    audio: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Process one turn of AI call conversation"""
+    user = await get_current_user(authorization, request)
+    
+    if not call_id:
+        raise HTTPException(status_code=400, detail="call_id required")
+    
+    # Verify call session
+    call_session = ai_call_service.get_call_session(call_id)
+    if not call_session:
+        raise HTTPException(status_code=404, detail="Call session not found")
+    
+    if call_session["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    # Read audio data
+    audio_data = await audio.read()
+    
+    # Get conversation context if available
+    conversation_id = call_session.get("conversation_id")
+    conversation_context = ""
+    knowledge_context = ""
+    document_context = ""
+    
+    if conversation_id:
+        messages = []
+        async for msg in db.messages.find(
+            {"conversation_id": conversation_id},
+            {"_id": 0}
+        ).sort("timestamp", 1).limit(10):
+            messages.append(msg)
+        
+        if messages:
+            regular_messages = []
+            for m in messages:
+                if m.get("is_document_context"):
+                    document_context = m.get("content", "")
+                else:
+                    regular_messages.append(f"{m['role']}: {m['content']}")
+            conversation_context = "\n".join(regular_messages)
+    
+    try:
+        # Process audio turn
+        result = await ai_call_service.process_audio_turn(
+            call_id=call_id,
+            audio_data=audio_data,
+            conversation_context=conversation_context,
+            knowledge_context=knowledge_context,
+            document_context=document_context
+        )
+        
+        # Save messages to conversation if conversation_id exists
+        if conversation_id:
+            # Save user message
+            user_msg = {
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "conversation_id": conversation_id,
+                "role": "user",
+                "content": result["transcribed_text"],
+                "timestamp": datetime.now(timezone.utc),
+                "from_call": True
+            }
+            await db.messages.insert_one(user_msg)
+            
+            # Save assistant message
+            assistant_msg = {
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "conversation_id": conversation_id,
+                "role": "assistant",
+                "content": result["response_text"],
+                "timestamp": datetime.now(timezone.utc),
+                "from_call": True
+            }
+            await db.messages.insert_one(assistant_msg)
+            
+            # Update conversation
+            await db.conversations.update_one(
+                {"conversation_id": conversation_id},
+                {"$set": {"updated_at": datetime.now(timezone.utc)}}
+            )
+        
+        return result
+        
+    except Exception as e:
+        print(f"AI call turn error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai-call/end")
+async def end_ai_call(
+    request: Request,
+    authorization: Optional[str] = Header(None)
+):
+    """End AI voice call session"""
+    user = await get_current_user(authorization, request)
+    
+    body = await request.json()
+    call_id = body.get("call_id")
+    
+    if not call_id:
+        raise HTTPException(status_code=400, detail="call_id required")
+    
+    # Verify and end session
+    call_session = ai_call_service.get_call_session(call_id)
+    if call_session and call_session["user_id"] == user["user_id"]:
+        ai_call_service.end_call_session(call_id)
+    
+    return {"message": "Call ended"}
+
+
+# ============================================================================
+# PDF GENERATION ENDPOINTS
+# ============================================================================
+
+class PDFGenerationRequest(BaseModel):
+    document_type: str
+    document_content: str
+    user_name: Optional[str] = "Citizen"
+
+
+@app.post("/api/generate-pdf")
+async def generate_pdf(
+    request: PDFGenerationRequest,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Generate PDF from document content
+    
+    Request body:
+    {
+        "document_type": "RTI Application",
+        "document_content": "Full document text...",
+        "user_name": "User Name" (optional)
+    }
+    
+    Returns: PDF file as download
+    """
+    try:
+        # Generate PDF
+        pdf_buffer = PDFGeneratorService.generate_document_pdf(
+            document_type=request.document_type,
+            document_content=request.document_content,
+            user_name=request.user_name
+        )
+        
+        # Create filename
+        filename = f"{request.document_type.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        # Return as downloadable file
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except Exception as e:
+        print(f"PDF generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn

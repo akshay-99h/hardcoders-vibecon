@@ -168,6 +168,35 @@ Keywords Detected: {', '.join(keywords_matched)}
                     context_text += f"    {right_info}\n"
             context_text += "\n"
         
+        # Add document templates if available
+        templates = data.get("templates", {})
+        can_generate = data.get("can_generate", [])
+        cannot_generate = data.get("cannot_generate", {})
+        
+        if templates:
+            context_text += "DOCUMENT TEMPLATES AVAILABLE:\n"
+            context_text += f"Can generate: {', '.join(can_generate)}\n"
+            if cannot_generate:
+                cannot_types = cannot_generate.get("types", [])
+                cannot_reason = cannot_generate.get("reason", "")
+                cannot_redirect = cannot_generate.get("redirect", "")
+                context_text += f"Cannot generate: {', '.join(cannot_types)}\n"
+                context_text += f"Reason: {cannot_reason}\n"
+                context_text += f"Redirect: {cannot_redirect}\n"
+            context_text += "\n"
+            
+            context_text += "TEMPLATE DETAILS:\n"
+            for template_name, template_info in templates.items():
+                desc = template_info.get("description", "")
+                required_fields = template_info.get("required_fields", [])
+                context_text += f"  • {template_name.replace('_', ' ').title()}: {desc}\n"
+                context_text += f"    Required fields: {len(required_fields)}\n"
+                for field in required_fields[:5]:  # Show first 5 fields
+                    context_text += f"      - {field.get('field')}: {field.get('ask')}\n"
+                if len(required_fields) > 5:
+                    context_text += f"      ... and {len(required_fields) - 5} more fields\n"
+            context_text += "\n"
+        
         context_text += """
 IMPORTANT: Use this verified information to provide accurate, safe guidance. 
 Always direct users to official portals and helplines mentioned above.

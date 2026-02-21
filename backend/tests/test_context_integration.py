@@ -17,7 +17,7 @@ from services.context_service import ContextService
 from agents.problem_understanding_agent import ProblemUnderstandingAgent
 
 # Test configuration
-BASE_URL = "https://raksha-india-gov.preview.emergentagent.com"
+BASE_URL = "https://rti-helper-bot.preview.emergentagent.com"
 TIMEOUT = 30.0
 
 class TestContextIntegration:

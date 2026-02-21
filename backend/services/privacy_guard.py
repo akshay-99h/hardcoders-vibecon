@@ -6,10 +6,11 @@ class PrivacyGuard:
     
     # Sensitive patterns that should never be requested by AI
     SENSITIVE_PATTERNS = [
-        # Aadhaar numbers only (12 digits)
-        (r'\b\d{4}\s*\d{4}\s*\d{4}\b', "aadhaar_number"),
-        (r'\b\d{12}\b', "aadhaar_number"),
-        (r'(your|my|enter|provide|share|give|tell)\s+(aadhaar|aadhar)\s+number', "aadhaar_number_request"),
+        # Aadhaar numbers only (12 digits) - BUT NOT enrollment IDs (14 digits)
+        # Match 12 digits that are NOT part of a 14-digit enrollment ID
+        (r'\b\d{4}\s*\d{4}\s*\d{4}(?!\d)\b', "aadhaar_number"),
+        (r'\b(?<!\d)\d{12}(?!\d)\b', "aadhaar_number"),
+        (r'(your|my|enter|provide|share|give|tell)\s+(aadhaar|aadhar)\s+number(?!\s*(is|:|=|\w{12}))', "aadhaar_number_request"),
         
         # PAN numbers only
         (r'\b[A-Z]{5}\d{4}[A-Z]\b', "pan_number"),
