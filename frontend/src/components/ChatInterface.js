@@ -516,44 +516,85 @@ function ChatInterface() {
 
         {/* Input Area - Fixed at Bottom */}
         <div className="bg-card border-t border-border p-4 flex-shrink-0">
-          <div className="max-w-4xl mx-auto flex items-end gap-2">
-            <button
-              className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
-              title="Attach file"
-            >
-              <HiPaperClip size={20} />
-            </button>
-
-            <button
-              onClick={isRecording ? handleStopRecording : handleStartRecording}
-              className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
-                isRecording
-                  ? 'bg-destructive text-destructive-foreground animate-pulse'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-              }`}
-            >
-              <HiMicrophone size={20} />
-            </button>
-
-            <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
-              <textarea
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Type your message..."
-                className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
-                rows={1}
-                style={{ maxHeight: '120px' }}
+          <div className="max-w-4xl mx-auto">
+            {/* File Preview */}
+            {selectedFile && (
+              <div className="mb-3 p-3 bg-muted rounded-lg flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center">
+                    <HiPaperClip className="text-primary" size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(selectedFile.size / 1024).toFixed(1)} KB • Ready to analyze
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleRemoveFile}
+                  className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
+                  title="Remove file"
+                >
+                  <HiTrash size={18} />
+                </button>
+              </div>
+            )}
+            
+            <div className="flex items-end gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+                onChange={handleFileSelect}
+                className="hidden"
               />
-            </div>
+              
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0"
+                title="Upload document (legal notice, certificate, etc.)"
+              >
+                <HiPaperClip size={20} />
+              </button>
 
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputMessage.trim() || isLoading}
-              className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
-            >
-              <HiPaperAirplane size={20} />
-            </button>
+              <button
+                onClick={isRecording ? handleStopRecording : handleStartRecording}
+                className={`p-3 transition-colors rounded-lg flex-shrink-0 ${
+                  isRecording
+                    ? 'bg-destructive text-destructive-foreground animate-pulse'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+                title="Voice input"
+              >
+                <HiMicrophone size={20} />
+              </button>
+
+              <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
+                <textarea
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder={selectedFile ? "Add a question about the document (optional)..." : "Type your message..."}
+                  className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
+                  rows={1}
+                  style={{ maxHeight: '120px' }}
+                />
+              </div>
+
+              <button
+                onClick={handleSendMessage}
+                disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
+                className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                title={selectedFile ? "Analyze document" : "Send message"}
+              >
+                {isAnalyzing ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <HiPaperAirplane size={20} />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
