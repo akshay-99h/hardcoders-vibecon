@@ -24,6 +24,8 @@ function ChatInterface() {
   const [selectedLanguage, setSelectedLanguage] = useState('en'); // Language for STT
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState(null);
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
