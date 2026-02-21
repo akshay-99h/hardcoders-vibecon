@@ -265,7 +265,7 @@ function ChatInterface() {
       
       // Auto-stop after 10 seconds (user can also tap to send earlier)
       setTimeout(() => {
-        if (mediaRecorder.state === 'recording' && isInVoiceMode) {
+        if (mediaRecorder.state === 'recording' && isInVoiceModeRef.current) {
           stopVoiceListening();
         }
       }, 10000);
