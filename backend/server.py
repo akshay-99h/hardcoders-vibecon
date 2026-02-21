@@ -406,6 +406,93 @@ async def synthesize_speech(request: Request, authorization: Optional[str] = Hea
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============== DOCUMENT ANALYSIS ENDPOINTS ==============
+
+@app.post("/api/documents/analyze")
+async def analyze_document(
+    file: UploadFile = File(...),
+    query: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Analyze a legal document image using OCR and AI"""
+    user = await get_current_user(authorization, request)
+    
+    # Check file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported file type. Allowed: JPEG, PNG, WEBP, PDF"
+        )
+    
+    # Check file size (10MB limit)
+    file_content = await file.read()
+    if len(file_content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
+    
+    try:
+        # Convert to base64
+        image_base64 = base64.b64encode(file_content).decode('utf-8')
+        
+        # Analyze the document
+        result = await vision_service.analyze_legal_document(
+            image_base64=image_base64,
+            user_query=query
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message", "Analysis failed"))
+        
+        return {
+            "success": True,
+            "analysis": result["analysis"],
+            "model_used": result["model_used"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Document analysis error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to analyze document")
+
+@app.post("/api/documents/ocr")
+async def extract_text_from_document(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Extract text from document image (OCR only)"""
+    user = await get_current_user(authorization, request)
+    
+    # Check file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported file type. Allowed: JPEG, PNG, WEBP"
+        )
+    
+    try:
+        file_content = await file.read()
+        image_base64 = base64.b64encode(file_content).decode('utf-8')
+        
+        result = await vision_service.extract_text_only(image_base64)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail="OCR failed")
+        
+        return {
+            "success": True,
+            "text": result["extracted_text"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"OCR error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to extract text")
+
 # ============== HEALTH CHECK ==============
 
 @app.get("/api/health")
