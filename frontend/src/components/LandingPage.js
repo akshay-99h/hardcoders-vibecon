@@ -183,11 +183,11 @@ function LandingPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="text-center">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">🎯</span>
+                <span className="text-3xl">💬</span>
               </div>
-              <h3 className="font-bold text-lg text-gray-900 mb-2">1. Describe Your Mission</h3>
+              <h3 className="font-bold text-lg text-gray-900 mb-2">1. Start a Chat</h3>
               <p className="text-gray-600 text-sm">
-                Tell us what you need in text or voice. Our AI understands your goal.
+                Tell our AI guide what you need in plain language - like texting a friend.
               </p>
             </div>
 
