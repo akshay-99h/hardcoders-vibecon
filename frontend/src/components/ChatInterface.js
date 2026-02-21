@@ -368,31 +368,89 @@ function ChatInterface() {
       return;
     }
 
-    // Create speech synthesis utterance
-    const utterance = new SpeechSynthesisUtterance(message.content);
+    // Clean the text for better speech
+    let cleanText = message.content;
     
-    // Set language based on content (basic detection)
-    if (/[\u0900-\u097F]/.test(message.content)) {
-      utterance.lang = 'hi-IN'; // Hindi
-    } else {
-      utterance.lang = 'en-US'; // English
-    }
+    // Remove emojis
+    cleanText = cleanText.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
+    cleanText = cleanText.replace(/[\u{1F300}-\u{1F5FF}]/gu, ''); // Symbols & Pictographs
+    cleanText = cleanText.replace(/[\u{1F680}-\u{1F6FF}]/gu, ''); // Transport & Map
+    cleanText = cleanText.replace(/[\u{1F700}-\u{1F77F}]/gu, ''); // Alchemical
+    cleanText = cleanText.replace(/[\u{1F780}-\u{1F7FF}]/gu, ''); // Geometric Shapes
+    cleanText = cleanText.replace(/[\u{1F800}-\u{1F8FF}]/gu, ''); // Supplemental Arrows
+    cleanText = cleanText.replace(/[\u{1F900}-\u{1F9FF}]/gu, ''); // Supplemental Symbols
+    cleanText = cleanText.replace(/[\u{1FA00}-\u{1FA6F}]/gu, ''); // Chess Symbols
+    cleanText = cleanText.replace(/[\u{1FA70}-\u{1FAFF}]/gu, ''); // Symbols and Pictographs Extended-A
+    cleanText = cleanText.replace(/[\u{2600}-\u{26FF}]/gu, '');   // Miscellaneous Symbols
+    cleanText = cleanText.replace(/[\u{2700}-\u{27BF}]/gu, '');   // Dingbats
+    cleanText = cleanText.replace(/[\u{FE00}-\u{FE0F}]/gu, '');   // Variation Selectors
+    cleanText = cleanText.replace(/[\u{1F1E0}-\u{1F1FF}]/gu, ''); // Flags
     
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
+    // Remove markdown formatting
+    cleanText = cleanText.replace(/(\*\*|__)(.*?)\1/g, '$2'); // Bold
+    cleanText = cleanText.replace(/(\*|_)(.*?)\1/g, '$2');     // Italic
+    cleanText = cleanText.replace(/`([^`]+)`/g, '$1');         // Code
+    cleanText = cleanText.replace(/^#+\s/gm, '');              // Headers
+    cleanText = cleanText.replace(/^\s*[-*+]\s/gm, '');        // List bullets
+    cleanText = cleanText.replace(/^\s*\d+\.\s/gm, '');        // Numbered lists
+    
+    // Remove multiple spaces and trim
+    cleanText = cleanText.replace(/\s+/g, ' ').trim();
+    
+    if (!cleanText) return;
+    
+    // Check if text has exclamation marks for emphasis
+    const hasEmphasis = cleanText.includes('!');
+    
+    // Detect language
+    const isHindi = /[\u0900-\u097F]/.test(cleanText);
+    
+    // Split by sentences for better emphasis handling
+    const sentences = cleanText.split(/([.!?]+\s+)/);
+    let currentIndex = 0;
+    
+    const speakNextSentence = () => {
+      if (currentIndex >= sentences.length) {
+        setSpeakingMessageId(null);
+        return;
+      }
+      
+      const sentence = sentences[currentIndex].trim();
+      if (!sentence || /^[.!?]+$/.test(sentence)) {
+        currentIndex++;
+        speakNextSentence();
+        return;
+      }
+      
+      const utterance = new SpeechSynthesisUtterance(sentence);
+      utterance.lang = isHindi ? 'hi-IN' : 'en-US';
+      
+      // Add emphasis if sentence has exclamation mark
+      if (sentence.includes('!')) {
+        utterance.rate = 0.9;    // Slightly slower for emphasis
+        utterance.pitch = 1.2;   // Higher pitch for excitement
+        utterance.volume = 1.0;  // Maximum volume
+      } else {
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 0.9;
+      }
+      
+      utterance.onend = () => {
+        currentIndex++;
+        speakNextSentence();
+      };
+      
+      utterance.onerror = () => {
+        setSpeakingMessageId(null);
+      };
+      
+      window.speechSynthesis.speak(utterance);
+    };
     
     // Track which message is being spoken
     setSpeakingMessageId(message.timestamp);
-    
-    utterance.onend = () => {
-      setSpeakingMessageId(null);
-    };
-    
-    utterance.onerror = () => {
-      setSpeakingMessageId(null);
-    };
-    
-    window.speechSynthesis.speak(utterance);
+    speakNextSentence();
   };
 
   const handleCopyToClipboard = async (message) => {
