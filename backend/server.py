@@ -341,7 +341,7 @@ async def get_mission(mission_id: str, authorization: Optional[str] = Header(Non
     if not mission_doc:
         raise HTTPException(status_code=404, detail="Mission not found")
     
-    return mission_doc
+    return serialize_doc(mission_doc)
 
 @app.put("/api/missions/{mission_id}/step/{step_index}")
 async def update_step_status(
