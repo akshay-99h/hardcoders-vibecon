@@ -1360,7 +1360,7 @@ function ChatInterface() {
                   {isAnalyzing ? (
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <SendIcon size={20} />
+                    <ArrowRight01Icon size={20} />
                   )}
                 </button>
                 
