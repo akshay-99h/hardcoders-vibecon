@@ -500,6 +500,7 @@ function ChatInterface() {
     isInVoiceModeRef.current = false; // Update ref for callbacks
     setVoiceState('idle');
     setVoiceVolume(0); // Reset volume indicator
+    setIsUserSpeaking(false); // Reset speaking indicator
     
     // Stop recording if active
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
