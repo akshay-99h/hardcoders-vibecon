@@ -1,13 +1,30 @@
 // Background Service Worker - Mission-Mode Browser Assistant
 // Manages WebSocket connection to backend, coordinates automation tasks
 
-const BACKEND_URL = 'https://rti-helper-bot.preview.emergentagent.com';
+const BACKEND_URL = 'https://raksha-govt-portal.preview.emergentagent.com';
 let sessionToken = null;
 let currentMission = null;
 let automationState = 'idle'; // idle | awaiting_permission | running | paused | waiting_human
 let automationTabId = null; // tab used for automation
 let pollingInterval = null;
 let isConnected = false;
+
+// ─── Mission step runner state ───────────────────────────────────────────────
+let missionSteps = [];
+let currentStepIndex = 0;
+
+function setAutomationState(newState) {
+  automationState = newState;
+  chrome.storage.local.set({ automationState: newState });
+}
+
+function adjustPollingSpeed() {
+  // Slow poll when idle, fast poll when active
+  if (!sessionToken) return;
+  const isActive = automationState !== 'idle';
+  if (pollingInterval) clearInterval(pollingInterval);
+  pollingInterval = setInterval(() => pollCommands(sessionToken), isActive ? 2000 : 10000);
+}
 
 // ─── HTTP Polling Connection ─────────────────────────────────────────────────
 
