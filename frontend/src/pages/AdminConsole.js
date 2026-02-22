@@ -21,22 +21,24 @@ import {
   FiBarChart2,
   FiCreditCard,
   FiList,
-  FiMenu,
   FiRefreshCw,
   FiShield,
   FiUsers,
-  FiX,
 } from 'react-icons/fi';
 import { Switch } from '../components/ui/switch';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ChartTooltipContent } from '../components/ui/chart';
 import { AdminDataTable, SortableHeader } from '../components/admin/AdminDataTable';
+import { useClientEnvironment } from '../utils/clientEnvironment';
 import api from '../utils/api';
 
 const CHART_COLORS = ['#0f49bd', '#3f83f8', '#7cb0ff', '#9ca3af', '#f59e0b', '#ef4444'];
 
 const NAV_GROUPS = [
   {
+    id: 'analytics',
     label: 'Analytics',
+    icon: FiBarChart2,
     items: [
       {
         path: '/admin/analytics/overview',
@@ -53,7 +55,9 @@ const NAV_GROUPS = [
     ],
   },
   {
+    id: 'ums',
     label: 'UMS',
+    icon: FiShield,
     items: [
       {
         path: '/admin/ums/admin-whitelist',
@@ -70,7 +74,9 @@ const NAV_GROUPS = [
     ],
   },
   {
+    id: 'billing',
     label: 'Billing',
+    icon: FiCreditCard,
     items: [
       {
         path: '/admin/payments',
@@ -146,40 +152,14 @@ function ChartCard({ title, subtitle, children }) {
   );
 }
 
-function NavItem({ item, active, onClick }) {
-  const Icon = item.icon;
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
-        active
-          ? 'border-primary/40 bg-primary/10'
-          : 'border-transparent hover:border-border hover:bg-accent'
-      }`}
-    >
-      <div className="flex items-start gap-2.5">
-        <span className={`mt-0.5 ${active ? 'text-primary' : 'text-muted-foreground'}`}>
-          <Icon size={15} />
-        </span>
-        <span className="min-w-0">
-          <span className={`block text-sm font-medium ${active ? 'text-primary' : 'text-foreground'}`}>
-            {item.title}
-          </span>
-          <span className="block text-xs text-muted-foreground truncate">{item.subtitle}</span>
-        </span>
-      </div>
-    </button>
-  );
-}
-
 function AdminConsole() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isMobileViewport, isStandalonePWA } = useClientEnvironment();
+  const isCompactLayout = isMobileViewport || isStandalonePWA;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [user, setUser] = useState(null);
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
@@ -191,19 +171,6 @@ function AdminConsole() {
   const [error, setError] = useState('');
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-
-  useEffect(() => {
-    const onResize = () => {
-      const mobile = window.innerWidth < 1024;
-      setIsMobile(mobile);
-      if (!mobile) {
-        setSidebarOpen(true);
-      }
-    };
-
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
 
   const activePath = useMemo(() => {
     const normalized = location.pathname.replace(/\/$/, '') || '/admin';
@@ -217,6 +184,10 @@ function AdminConsole() {
     () => NAV_ITEMS.find((item) => item.path === activePath) || NAV_ITEMS[0],
     [activePath]
   );
+
+  const activeGroup = useMemo(() => {
+    return NAV_GROUPS.find((group) => group.items.some((item) => item.path === activePath)) || NAV_GROUPS[0];
+  }, [activePath]);
 
   const hydrateSeatDrafts = (nextUsers) => {
     const drafts = {};
@@ -1032,109 +1003,98 @@ function AdminConsole() {
     );
   }
 
+  const bottomNavPaddingClass = isCompactLayout ? 'pb-36' : 'pb-28';
+
   return (
     <div className="min-h-screen bg-background">
-      {isMobile && sidebarOpen && (
-        <button
-          className="fixed inset-0 z-30 bg-black/40"
-          onClick={() => setSidebarOpen(false)}
-          aria-label="Close admin sidebar"
-        />
-      )}
-
-      <div className="mx-auto flex min-h-screen max-w-[1600px]">
-        <aside
-          className={`z-40 flex h-[100dvh] flex-col border-r border-border bg-card transition-transform duration-300 ${
-            isMobile
-              ? `fixed left-0 top-0 w-[290px] ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
-              : 'sticky top-0 w-[290px] translate-x-0'
-          }`}
-        >
-          <div className="flex items-center justify-between border-b border-border p-4">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Admin Console</p>
-              <p className="text-xs text-muted-foreground">Billing + UMS controls</p>
-            </div>
-            {isMobile && (
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label="Close sidebar"
-              >
-                <FiX size={16} />
-              </button>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-3">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="mb-4">
-                <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {group.label}
-                </p>
-                <div className="space-y-1.5">
-                  {group.items.map((item) => (
-                    <NavItem
-                      key={item.path}
-                      item={item}
-                      active={activePath === item.path}
-                      onClick={() => {
-                        navigate(item.path);
-                        if (isMobile) setSidebarOpen(false);
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="border-t border-border p-4">
+      <main className={`mx-auto w-full max-w-[1600px] px-4 pt-4 sm:px-6 sm:pt-6 ${bottomNavPaddingClass}`}>
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => navigate('/chat')}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-accent"
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-accent"
             >
+              <FiArrowLeft size={14} />
               Back to Chat
             </button>
+            <div className="hidden sm:block">
+              <h1 className="text-lg font-semibold text-foreground">Admin Console</h1>
+              <p className="text-xs text-muted-foreground">Billing + UMS controls</p>
+            </div>
           </div>
-        </aside>
 
-        <main className="flex-1 overflow-x-hidden px-4 pb-6 pt-4 sm:px-6 sm:pt-6">
-          <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              {isMobile && (
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  <FiMenu size={16} />
-                </button>
-              )}
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">{activeNavItem.title}</h1>
-                <p className="text-sm text-muted-foreground">{activeNavItem.subtitle}</p>
-              </div>
-            </div>
+          <button
+            onClick={() => fetchAdminData({ asRefresh: true })}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-accent disabled:opacity-60"
+          >
+            <FiRefreshCw className={refreshing ? 'animate-spin' : ''} size={14} />
+            {refreshing ? 'Refreshing...' : 'Refresh Data'}
+          </button>
+        </header>
 
-            <button
-              onClick={() => fetchAdminData({ asRefresh: true })}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-accent disabled:opacity-60"
-            >
-              <FiRefreshCw className={refreshing ? 'animate-spin' : ''} size={14} />
-              {refreshing ? 'Refreshing...' : 'Refresh Data'}
-            </button>
-          </header>
+        <section className="mb-5 rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {activeGroup.label}
+          </p>
+          <h2 className="mt-2 text-xl font-bold text-foreground sm:text-2xl">{activeNavItem.title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{activeNavItem.subtitle}</p>
 
-          {error && (
-            <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
+          <Tabs
+            value={activePath}
+            onValueChange={(nextPath) => {
+              if (nextPath && nextPath !== activePath) {
+                navigate(nextPath);
+              }
+            }}
+            className="mt-4"
+          >
+            <TabsList className="w-full justify-start gap-1 overflow-x-auto p-1">
+              {activeGroup.items.map((item) => (
+                <TabsTrigger key={item.path} value={item.path} className="shrink-0">
+                  {item.title}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </section>
 
-          {renderPageContent()}
-        </main>
-      </div>
+        {error && (
+          <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {renderPageContent()}
+      </main>
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.45rem)' }}
+      >
+        <div className="mx-auto grid w-full max-w-[1600px] grid-cols-3 gap-1 px-3 pt-2">
+          {NAV_GROUPS.map((group) => {
+            const Icon = group.icon;
+            const isActive = group.id === activeGroup.id;
+            const target = group.items.find((item) => item.path === activePath)?.path || group.items[0].path;
+
+            return (
+              <button
+                key={group.id}
+                onClick={() => navigate(target)}
+                className={`rounded-xl px-3 py-2 text-left transition-colors ${
+                  isActive ? 'bg-primary/12 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2 text-sm font-medium">
+                  <Icon size={15} />
+                  <span>{group.label}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }
