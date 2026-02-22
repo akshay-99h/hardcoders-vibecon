@@ -1214,8 +1214,8 @@ async function readSessionCookie() {
     // Try backend domain first
     const cookie = await chrome.cookies.get({ url: BACKEND_URL, name: 'session_token' });
     if (cookie?.value) return cookie.value;
-    // Try frontend domain
-    const cookie2 = await chrome.cookies.get({ url: 'https://rti-helper-bot.preview.emergentagent.com', name: 'session_token' });
+    // Try frontend domain (same origin as backend in this deployment)
+    const cookie2 = await chrome.cookies.get({ url: 'https://raksha-govt-portal.preview.emergentagent.com', name: 'session_token' });
     if (cookie2?.value) return cookie2.value;
   } catch (_) {}
   return null;
