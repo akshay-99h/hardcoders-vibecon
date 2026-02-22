@@ -60,3 +60,7 @@ frontend/package-lock.json
 # React build
 build/
 .cache/
+-e 
+# Environment files
+*.env
+*.env.*
