@@ -351,6 +351,21 @@ AI Response (ask first):
         if previous_context:
             prompt += f"Previous conversation:\n{previous_context}\n\n"
         
+        # Web search for procedural/government queries
+        web_context = ""
+        if not fast_mode and _should_search(user_input):
+            results = _web_search(user_input)
+            if results:
+                snippets = []
+                for r in results[:3]:
+                    title = r.get("title", "")
+                    body = r.get("body", r.get("snippet", ""))
+                    href = r.get("href", r.get("url", ""))
+                    if body:
+                        snippets.append(f"[{title}]({href})\n{body[:400]}")
+                web_context = "\n\n".join(snippets)
+                prompt += f"WEB SEARCH RESULTS (use for accuracy):\n{web_context}\n\n"
+
         # Add user's current question
         prompt += f"User question: {user_input}\n\n"
         
