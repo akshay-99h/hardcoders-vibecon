@@ -6,17 +6,6 @@ let sessionToken = null;
 let currentMission = null;
 let automationState = 'idle'; // idle | awaiting_permission | running | paused | waiting_human
 let automationTabId = null; // tab used for automation
-let missionSteps = []; // all steps for current mission
-let currentStepIndex = 0; // which step we're on
-
-function setAutomationState(newState) {
-  automationState = newState;
-  chrome.storage.local.set({ automationState: newState });
-}
-function setAutomationTabId(tabId) {
-  automationTabId = tabId;
-  chrome.storage.local.set({ automationTabId: tabId });
-}
 let pollingInterval = null;
 let isConnected = false;
 
@@ -27,7 +16,7 @@ async function connectPolling(token) {
     console.log('[Mission] No token, skipping polling registration');
     return;
   }
-  if (isConnected) return;
+  if (isConnected && pollingInterval) return;
 
   try {
     const res = await fetch(`${BACKEND_URL}/api/automation/extension/register`, {
@@ -53,40 +42,20 @@ async function connectPolling(token) {
   }
 }
 
-const ALARM_NAME = 'automation_poll';
-
 function startPolling(token) {
-  // chrome.alarms survives service worker suspension (min period = 0.5 min for repeating)
-  // For fast polling, we use a one-shot alarm that re-creates itself
-  chrome.alarms.clear(ALARM_NAME);
-  const delaySec = (automationState !== 'idle') ? 3 : 10;
-  chrome.alarms.create(ALARM_NAME, { delayInMinutes: delaySec / 60 });
-  console.log(`[Mission] Polling alarm set (${delaySec}s)`);
-}
-
-function adjustPollingSpeed() {
-  if (!sessionToken) return;
-  startPolling(sessionToken);
+  if (pollingInterval) clearInterval(pollingInterval);
+  pollingInterval = setInterval(() => pollCommands(token), 2000);
+  console.log('[Mission] Polling started (every 2s)');
 }
 
 function stopPolling() {
-  chrome.alarms.clear(ALARM_NAME);
-  pollingInterval = null;
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
+  }
   isConnected = false;
   broadcastToPopup({ type: 'WS_DISCONNECTED' });
 }
-
-// Alarm handler — wakes up service worker
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name !== ALARM_NAME) return;
-  if (!sessionToken) return;
-  await pollCommands(sessionToken);
-  // Re-schedule next poll
-  if (isConnected) {
-    const delaySec = (automationState !== 'idle') ? 3 : 10;
-    chrome.alarms.create(ALARM_NAME, { delayInMinutes: delaySec / 60 });
-  }
-});
 
 async function pollCommands(token) {
   try {
@@ -116,59 +85,9 @@ async function handleBackendMessage(msg) {
 
   switch (msg.type) {
 
-    case 'start_automation': {
-      // Ignore if we're already handling a mission
-      if (automationState !== 'idle') break;
-      // Check if we already processed this mission (survives SW restart)
-      const mId = msg.mission_id;
-      const { lastReceivedMissionId } = await chrome.storage.local.get('lastReceivedMissionId');
-      if (lastReceivedMissionId === mId) {
-        console.log('[Mission] Ignoring duplicate start_automation for:', mId);
-        break;
-      }
-      chrome.storage.local.set({ lastReceivedMissionId: mId });
-
-      // Convert string steps to step objects
-      const rawSteps = msg.mission_steps || [];
-      const stepObjects = rawSteps.map((s, i) => {
-        // If already an object, use it
-        if (typeof s === 'object' && s.action) return s;
-        // Convert string to step object
-        const title = typeof s === 'string' ? s : (s.title || s.description || `Step ${i + 1}`);
-        const isSensitive = /aadhaar|pan|password|otp|dob|date of birth|mobile|phone|login|sign in|credentials|fill|enter|upload|pay|payment/i.test(title);
-        return {
-          step_id: `step_${Date.now()}_${i}`,
-          action: 'human_required',
-          title: title,
-          description: title,
-          label: title,
-          sensitive: isSensitive,
-          url: msg.portal_url,
-          hint: isSensitive
-            ? 'This step involves personal data. Please do it manually, then click Done.'
-            : `Complete this step on the page: "${title}", then click Done.`
-        };
-      });
-
-      const mappedMsg = {
-        type: 'AUTOMATION_START',
-        mission: {
-          mission_id: msg.mission_id,
-          mission_title: msg.mission_title,
-          mission_description: msg.mission_description,
-        },
-        steps: stepObjects,
-        first_url: msg.portal_url
-      };
-      handleBackendMessage(mappedMsg);
-      break;
-    }
-
     case 'AUTOMATION_START': {
       currentMission = msg.mission;
-      missionSteps = msg.steps || [];
-      currentStepIndex = 0;
-      setAutomationState('awaiting_permission');
+      automationState = 'awaiting_permission';
       const permMsg = {
         type: 'REQUEST_PERMISSION',
         mission: msg.mission,
@@ -177,6 +96,10 @@ async function handleBackendMessage(msg) {
       };
       // Store so popup reads it on open
       chrome.storage.local.set({ lastPopupMsg: permMsg, pendingPermission: permMsg });
+      // Try to open popup automatically
+      if (chrome.action.openPopup) {
+        chrome.action.openPopup().catch(() => {});
+      }
       broadcastToPopup(permMsg);
       // Flash the extension badge to alert user
       chrome.action.setBadgeText({ text: '!' });
@@ -187,7 +110,7 @@ async function handleBackendMessage(msg) {
     case 'EXECUTE_STEP': {
       // Accept steps in running or awaiting_permission state (backend may send before popup acks)
       if (automationState === 'waiting_human' || automationState === 'idle') break;
-      setAutomationState('running');
+      automationState = 'running';
       await executeStep(msg.step);
       break;
     }
@@ -203,7 +126,7 @@ async function handleBackendMessage(msg) {
           hint: msg.hint
         });
       }
-      setAutomationState('waiting_human');
+      automationState = 'waiting_human';
       broadcastToPopup({ type: 'WAITING_HUMAN', label: msg.label, hint: msg.hint });
       break;
     }
@@ -214,8 +137,7 @@ async function handleBackendMessage(msg) {
     }
 
     case 'AUTOMATION_DONE': {
-      setAutomationState('idle');
-      adjustPollingSpeed(); // switch to slow polling
+      automationState = 'idle';
       chrome.action.setBadgeText({ text: '✓' });
       chrome.action.setBadgeBackgroundColor({ color: '#22c55e' });
       broadcastToPopup({ type: 'AUTOMATION_DONE', summary: msg.summary });
@@ -230,51 +152,12 @@ async function handleBackendMessage(msg) {
     }
 
     case 'AUTOMATION_ERROR': {
-      setAutomationState('idle');
+      automationState = 'idle';
       broadcastToPopup({ type: 'AUTOMATION_ERROR', error: msg.error });
       break;
     }
 
     }
-}
-
-// ─── Step-by-Step Runner ────────────────────────────────────────────────────
-
-async function runNextStep() {
-  if (currentStepIndex >= missionSteps.length) {
-    // All steps done
-    setAutomationState('idle');
-    adjustPollingSpeed();
-    chrome.action.setBadgeText({ text: '✓' });
-    chrome.action.setBadgeBackgroundColor({ color: '#22c55e' });
-    broadcastToPopup({ type: 'AUTOMATION_DONE', summary: 'All steps completed!' });
-    chrome.storage.local.remove(['pendingPermission', 'pendingHuman']);
-    sendWsMessage({ type: 'done', automation_state: { status: 'done' } });
-    if (automationTabId) {
-      chrome.tabs.sendMessage(automationTabId, { type: 'CLEAR_HIGHLIGHTS' }).catch(() => {});
-    }
-    return;
-  }
-
-  const step = missionSteps[currentStepIndex];
-  console.log(`[Mission] Running step ${currentStepIndex + 1}/${missionSteps.length}:`, step.title || step.action);
-  broadcastToPopup({ type: 'EXECUTING_STEP', step, progress: { current: currentStepIndex + 1, total: missionSteps.length } });
-
-  setAutomationState('running');
-  await executeStep(step);
-
-  // If step is human_required, don't auto-advance — doAdvance() inside executeStep will call advanceToNextStep()
-  // For other steps, advance immediately
-  if (step.action !== 'human_required') {
-    currentStepIndex++;
-    await sleep(1000);
-    runNextStep();
-  }
-}
-
-function advanceToNextStep() {
-  currentStepIndex++;
-  runNextStep();
 }
 
 // ─── Execute a Single Automation Step ───────────────────────────────────────
@@ -330,7 +213,7 @@ async function executeStep(step) {
             label: step.label || 'Enter your information',
             hint: step.hint || 'This field requires your personal data. Please fill it manually.'
           });
-          setAutomationState('waiting_human');
+          automationState = 'waiting_human';
           broadcastToPopup({ type: 'WAITING_HUMAN', label: step.label, hint: step.hint, step_id: step.step_id });
         } else {
           const result = await chrome.scripting.executeScript({
@@ -372,13 +255,14 @@ async function executeStep(step) {
       }
 
       case 'human_required': {
-        setAutomationState('waiting_human');
+        automationState = 'waiting_human';
         const stepId = step.step_id;
         const stepLabel = step.label || step.title;
 
         // Show immediately with default hint
         const defaultHumanMsg = { type: 'WAITING_HUMAN', label: stepLabel, hint: '🔍 Analyzing page...', step_id: stepId };
         chrome.storage.local.set({ pendingHuman: defaultHumanMsg });
+        if (chrome.action.openPopup) chrome.action.openPopup().catch(() => {});
         chrome.action.setBadgeText({ text: '✋' });
         chrome.action.setBadgeBackgroundColor({ color: '#f97316' });
         broadcastToPopup(defaultHumanMsg);
@@ -481,13 +365,11 @@ async function executeStep(step) {
             if (advanced) return;
             advanced = true;
             chrome.storage.local.remove('pendingHuman');
-            setAutomationState('running');
+            automationState = 'running';
             chrome.action.setBadgeText({ text: '▶' });
             chrome.action.setBadgeBackgroundColor({ color: '#3b82f6' });
             sendWsMessage({ type: 'HUMAN_DONE', step_id: stepId });
             broadcastToPopup({ type: 'EXECUTING_STEP', step: { title: 'Resuming...', description: '' } });
-            // Advance to next step after clearing highlights
-            setTimeout(() => advanceToNextStep(), 1500);
             // Clear highlights
             chrome.scripting.executeScript({
               target: { tabId: tab.id },
@@ -713,11 +595,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.type) {
 
     case 'SET_TOKEN': {
-      if (msg.token && msg.token !== sessionToken) {
-        sessionToken = msg.token;
-        chrome.storage.local.set({ sessionToken: msg.token });
-        connectPolling(sessionToken);
-      }
+      sessionToken = msg.token;
+      connectPolling(sessionToken);
+      chrome.storage.local.set({ sessionToken: msg.token });
       sendResponse({ ok: true });
       break;
     }
@@ -741,34 +621,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     case 'PERMISSION_GRANTED': {
-      setAutomationState('running');
-      adjustPollingSpeed(); // switch to fast polling
+      automationState = 'running';
       chrome.action.setBadgeText({ text: '▶' });
       chrome.action.setBadgeBackgroundColor({ color: '#3b82f6' });
       chrome.storage.local.remove('pendingPermission');
-      // Open automation in a NEW tab, then start running steps
+      // Open automation in a NEW tab, then tell backend to start
       const firstUrl = msg.firstUrl || 'https://uidai.gov.in';
       chrome.tabs.create({ url: firstUrl, active: true }, (newTab) => {
-        setAutomationTabId(newTab.id);
+        automationTabId = newTab.id;
+        // Notify backend AFTER tab is created so automationTabId is ready
         sendWsMessage({ type: 'PERMISSION_GRANTED', mission_id: currentMission?.mission_id });
-        // Wait for tab to load, then start step-by-step execution
-        waitForTabLoad(newTab.id).then(() => {
-          sleep(1500).then(() => runNextStep());
-        });
       });
       sendResponse({ ok: true });
       break;
     }
 
     case 'PERMISSION_DENIED': {
-      setAutomationState('idle');
+      automationState = 'idle';
       sendWsMessage({ type: 'PERMISSION_DENIED', mission_id: currentMission?.mission_id });
       sendResponse({ ok: true });
       break;
     }
 
     case 'HUMAN_DONE': {
-      setAutomationState('running');
+      automationState = 'running';
       sendWsMessage({ type: 'HUMAN_DONE', step_id: msg.step_id });
       // Clear highlights in automation tab
       if (automationTabId) {
@@ -783,28 +659,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }
         }).catch(() => {});
       }
-      // Advance to next step
-      setTimeout(() => advanceToNextStep(), 1000);
       sendResponse({ ok: true });
       break;
     }
 
     case 'PAUSE': {
-      setAutomationState('paused');
+      automationState = 'paused';
       sendWsMessage({ type: 'PAUSE' });
       sendResponse({ ok: true });
       break;
     }
 
     case 'RESUME': {
-      setAutomationState('running');
+      automationState = 'running';
       sendWsMessage({ type: 'RESUME' });
       sendResponse({ ok: true });
       break;
     }
 
     case 'STOP': {
-      setAutomationState('idle');
+      automationState = 'idle';
       sendWsMessage({ type: 'STOP' });
       chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
         if (tab) chrome.tabs.sendMessage(tab.id, { type: 'CLEAR_HIGHLIGHTS' });
@@ -830,17 +704,10 @@ async function readSessionCookie() {
   return null;
 }
 
-// ─── Init: restore token and state from cookie/storage ──────────────────────
+// ─── Init: restore token from cookie or storage ────────────────────────────
 
 (async () => {
-  console.log('[Mission] Service worker init...');
-
-  // Restore automation state from storage (survives SW suspension)
-  const stored = await chrome.storage.local.get(['sessionToken', 'automationState', 'automationTabId']);
-  if (stored.automationState) automationState = stored.automationState;
-  if (stored.automationTabId) automationTabId = stored.automationTabId;
-
-  // Try reading the httpOnly cookie directly
+  // First try reading the httpOnly cookie directly
   const cookieToken = await readSessionCookie();
   if (cookieToken) {
     sessionToken = cookieToken;
@@ -849,10 +716,12 @@ async function readSessionCookie() {
     return;
   }
   // Fall back to stored token
-  if (stored.sessionToken) {
-    sessionToken = stored.sessionToken;
-    connectPolling(sessionToken);
-  } else {
-    console.log('[Mission] No token found, extension idle');
-  }
+  chrome.storage.local.get(['sessionToken'], (result) => {
+    if (result.sessionToken) {
+      sessionToken = result.sessionToken;
+      connectPolling(sessionToken);
+    } else {
+      console.log('[Mission] No token found, extension idle');
+    }
+  });
 })();
