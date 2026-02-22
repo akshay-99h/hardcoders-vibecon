@@ -81,7 +81,14 @@ function BillingPage() {
         let nextStatus = statusRes.data;
 
         const params = new URLSearchParams(location.search);
-        const checkoutFlow = params.get('checkout');
+        const normalizedPath = location.pathname.replace(/\/+$/, '');
+        const checkoutFlowFromPath =
+          normalizedPath === '/billing/checkout/success'
+            ? 'success'
+            : normalizedPath === '/billing/checkout/cancel'
+            ? 'cancel'
+            : null;
+        const checkoutFlow = params.get('checkout') || checkoutFlowFromPath;
         const checkoutSessionId = params.get('session_id');
 
         if (checkoutFlow === 'success') {
@@ -147,7 +154,9 @@ function BillingPage() {
           });
         }
 
-        if (checkoutFlow) {
+        if (checkoutFlowFromPath) {
+          window.history.replaceState({}, '', '/billing');
+        } else if (params.has('checkout') || params.has('session_id')) {
           window.history.replaceState({}, '', window.location.pathname);
         }
 
@@ -161,7 +170,7 @@ function BillingPage() {
     };
 
     bootstrap();
-  }, [navigate, location.search]);
+  }, [navigate, location.pathname, location.search]);
 
   const sortedPlans = useMemo(
     () => ['free', 'plus', 'pro', 'business'].filter((key) => plans[key]),
