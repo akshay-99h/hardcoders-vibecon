@@ -118,6 +118,9 @@ function LandingPage() {
                 <button onClick={() => window.location.href = '/privacy'} className="hover:text-foreground transition-colors">
                   {t(language, 'landingPage.privacyPolicy')}
                 </button>
+                <button onClick={() => window.location.href = '/contact'} className="hover:text-foreground transition-colors">
+                  Contact Us
+                </button>
               </div>
               <p className="text-sm text-muted-foreground">{t(language, 'landingPage.copyright')}</p>
             </motion.div>
@@ -143,6 +146,7 @@ function LandingPage() {
           <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
             <button onClick={() => window.location.href = '/terms'} className="hover:text-foreground transition-colors">{t(language, 'landingPage.termsOfService')}</button>
             <button onClick={() => window.location.href = '/privacy'} className="hover:text-foreground transition-colors">{t(language, 'landingPage.privacyPolicy')}</button>
+            <button onClick={() => window.location.href = '/contact'} className="hover:text-foreground transition-colors">Contact Us</button>
           </div>
           <p className="text-sm text-muted-foreground">{t(language, 'landingPage.copyright')}</p>
         </motion.div>

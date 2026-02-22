@@ -17,6 +17,7 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  FiAlertCircle,
   FiArrowLeft,
   FiBarChart2,
   FiCreditCard,
@@ -98,6 +99,19 @@ const NAV_GROUPS = [
       },
     ],
   },
+  {
+    id: 'support',
+    label: 'Support',
+    icon: FiAlertCircle,
+    items: [
+      {
+        path: '/admin/support/grievances',
+        title: 'Grievances',
+        subtitle: 'Contact-us tickets from users',
+        icon: FiAlertCircle,
+      },
+    ],
+  },
 ];
 
 const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
@@ -166,6 +180,7 @@ function AdminConsole() {
   const [seats, setSeats] = useState([]);
   const [events, setEvents] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
+  const [grievances, setGrievances] = useState([]);
   const [savingKey, setSavingKey] = useState('');
   const [seatDrafts, setSeatDrafts] = useState({});
   const [error, setError] = useState('');
@@ -205,12 +220,13 @@ function AdminConsole() {
     setError('');
 
     try {
-      const [overviewRes, usersRes, eventsRes, subscriptionsRes, seatsRes] = await Promise.all([
+      const [overviewRes, usersRes, eventsRes, subscriptionsRes, seatsRes, grievancesRes] = await Promise.all([
         api.get('/api/admin/billing/overview'),
         api.get('/api/admin/users?limit=200'),
         api.get('/api/admin/billing/events?limit=250'),
         api.get('/api/admin/subscriptions?limit=200'),
         api.get('/api/admin/seats?limit=200'),
+        api.get('/api/admin/grievances?limit=300'),
       ]);
 
       const nextUsers = usersRes.data?.users || [];
@@ -220,6 +236,7 @@ function AdminConsole() {
       setEvents(eventsRes.data?.events || []);
       setSubscriptions(subscriptionsRes.data?.subscriptions || []);
       setSeats(seatsRes.data?.seats || []);
+      setGrievances(grievancesRes.data?.grievances || []);
       hydrateSeatDrafts(nextUsers);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load admin console data.');
@@ -326,6 +343,27 @@ function AdminConsole() {
       await fetchAdminData();
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to update seat allocation.');
+    } finally {
+      setSavingKey('');
+    }
+  };
+
+  const updateGrievanceStatus = async (grievanceId, status) => {
+    const key = `grievance:${grievanceId}`;
+    setSavingKey(key);
+    setError('');
+
+    try {
+      await api.put(`/api/admin/grievances/${grievanceId}`, { status });
+      setGrievances((prev) =>
+        prev.map((entry) =>
+          entry.grievance_id === grievanceId
+            ? { ...entry, status, updated_at: new Date().toISOString() }
+            : entry
+        )
+      );
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update grievance status.');
     } finally {
       setSavingKey('');
     }
@@ -682,6 +720,77 @@ function AdminConsole() {
     []
   );
 
+  const grievanceColumns = useMemo(
+    () => [
+      {
+        accessorKey: 'grievance_id',
+        header: ({ column }) => <SortableHeader column={column} title="Ticket" />,
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.grievance_id || '-'}</span>,
+      },
+      {
+        accessorKey: 'topic',
+        header: ({ column }) => <SortableHeader column={column} title="Topic" />,
+        cell: ({ row }) => <span>{row.original.topic || '-'}</span>,
+      },
+      {
+        accessorKey: 'user_email',
+        header: ({ column }) => <SortableHeader column={column} title="User" />,
+        cell: ({ row }) => (
+          <div>
+            <p className="text-sm text-foreground">{row.original.user_name || 'User'}</p>
+            <p className="text-xs text-muted-foreground">{row.original.user_email || '-'}</p>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'message',
+        header: ({ column }) => <SortableHeader column={column} title="Message" />,
+        cell: ({ row }) => (
+          <span className="block max-w-[340px] truncate text-muted-foreground" title={row.original.message || ''}>
+            {row.original.message || '-'}
+          </span>
+        ),
+      },
+      {
+        id: 'source',
+        header: 'Source',
+        cell: ({ row }) => (
+          <div>
+            <p className="text-xs text-foreground">{row.original.source_device || '-'}</p>
+            <p className="text-[11px] text-muted-foreground">{row.original.source_ip || '-'}</p>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: ({ column }) => <SortableHeader column={column} title="Status" />,
+        cell: ({ row }) => {
+          const entry = row.original;
+          const key = `grievance:${entry.grievance_id}`;
+          return (
+            <select
+              value={entry.status || 'open'}
+              onChange={(event) => updateGrievanceStatus(entry.grievance_id, event.target.value)}
+              disabled={savingKey === key}
+              className="rounded-md border border-border bg-background px-2 py-1 text-xs capitalize"
+            >
+              <option value="open">open</option>
+              <option value="in_review">in_review</option>
+              <option value="resolved">resolved</option>
+              <option value="closed">closed</option>
+            </select>
+          );
+        },
+      },
+      {
+        accessorKey: 'created_at',
+        header: ({ column }) => <SortableHeader column={column} title="Created" />,
+        cell: ({ row }) => <span className="text-muted-foreground">{formatDateTime(row.original.created_at)}</span>,
+      },
+    ],
+    [savingKey]
+  );
+
   const renderPageContent = () => {
     if (activePath === '/admin/analytics/overview') {
       return (
@@ -962,6 +1071,34 @@ function AdminConsole() {
       );
     }
 
+    if (activePath === '/admin/support/grievances') {
+      const openCount = grievances.filter((item) => item.status === 'open').length;
+      const reviewCount = grievances.filter((item) => item.status === 'in_review').length;
+      const resolvedCount = grievances.filter((item) => item.status === 'resolved').length;
+      const closedCount = grievances.filter((item) => item.status === 'closed').length;
+
+      return (
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <MetricCard label="Total Tickets" value={grievances.length} />
+            <MetricCard label="Open" value={openCount} />
+            <MetricCard label="In Review" value={reviewCount} />
+            <MetricCard label="Resolved + Closed" value={resolvedCount + closedCount} />
+          </div>
+
+          <AdminDataTable
+            title="Grievances"
+            description='User-submitted contact requests. Update status as you process each ticket.'
+            data={grievances}
+            columns={grievanceColumns}
+            initialPageSize={10}
+            pageSizeOptions={[10, 20, 40]}
+            emptyMessage="No grievances submitted yet."
+          />
+        </div>
+      );
+    }
+
     return (
       <AdminDataTable
         title="Transactions"
@@ -1072,7 +1209,10 @@ function AdminConsole() {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.45rem)' }}
       >
-        <div className="mx-auto grid w-full max-w-[1600px] grid-cols-3 gap-1 px-3 pt-2">
+        <div
+          className="mx-auto grid w-full max-w-[1600px] gap-1 px-3 pt-2"
+          style={{ gridTemplateColumns: `repeat(${NAV_GROUPS.length}, minmax(0, 1fr))` }}
+        >
           {NAV_GROUPS.map((group) => {
             const Icon = group.icon;
             const isActive = group.id === activeGroup.id;

@@ -13,6 +13,7 @@ import TermsOfService from './components/TermsOfService';
 import AICall from './pages/AICall';
 import BillingPage from './pages/BillingPage';
 import AdminConsole from './pages/AdminConsole';
+import ContactUsPage from './pages/ContactUsPage';
 
 function AppRouter() {
   return (
@@ -30,6 +31,7 @@ function AppRouter() {
         <Route path="/billing/checkout/success" element={<BillingPage />} />
         <Route path="/billing/checkout/cancel" element={<BillingPage />} />
         <Route path="/billing/return" element={<BillingPage />} />
+        <Route path="/contact" element={<ContactUsPage />} />
         <Route path="/admin/*" element={<AdminConsole />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
