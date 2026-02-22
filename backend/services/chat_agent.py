@@ -13,7 +13,7 @@ from config.settings import settings
 def _web_search(query: str, max_results: int = 4) -> List[Dict[str, str]]:
     """Search the web using DuckDuckGo. Returns list of {title, body, href}."""
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=max_results))
             return results
