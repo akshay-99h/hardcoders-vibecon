@@ -1114,23 +1114,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     case 'PERMISSION_GRANTED': {
-      automationState = 'running';
+      setAutomationState('running');
+      adjustPollingSpeed();
       chrome.action.setBadgeText({ text: '▶' });
       chrome.action.setBadgeBackgroundColor({ color: '#3b82f6' });
       chrome.storage.local.remove('pendingPermission');
-      // Open automation in a NEW tab, then tell backend to start
-      const firstUrl = msg.firstUrl || 'https://uidai.gov.in';
+      // Open automation in a NEW tab, then kick off step runner
+      const firstUrl = msg.firstUrl || (missionSteps[0] && missionSteps[0].url) || 'https://services.india.gov.in';
       chrome.tabs.create({ url: firstUrl, active: true }, (newTab) => {
         automationTabId = newTab.id;
-        // Notify backend AFTER tab is created so automationTabId is ready
+        // Notify backend AFTER tab is created
         sendWsMessage({ type: 'PERMISSION_GRANTED', mission_id: currentMission?.mission_id });
+        // Start step runner
+        runNextStep().catch(err => console.error('[Mission] runNextStep error:', err));
       });
       sendResponse({ ok: true });
       break;
     }
 
     case 'PERMISSION_DENIED': {
-      automationState = 'idle';
+      setAutomationState('idle');
+      missionSteps = [];
+      currentStepIndex = 0;
       sendWsMessage({ type: 'PERMISSION_DENIED', mission_id: currentMission?.mission_id });
       sendResponse({ ok: true });
       break;
