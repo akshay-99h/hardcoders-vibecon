@@ -35,6 +35,18 @@ const ROUTE_SEO = {
     title: 'Billing | RakshaAI',
     description: 'Manage RakshaAI subscription plans and usage.',
   },
+  '/billing/checkout/success': {
+    title: 'Checkout Success | RakshaAI',
+    description: 'Stripe checkout completed. RakshaAI is syncing your subscription status.',
+  },
+  '/billing/checkout/cancel': {
+    title: 'Checkout Canceled | RakshaAI',
+    description: 'Stripe checkout was canceled. You can restart your RakshaAI upgrade anytime.',
+  },
+  '/billing/return': {
+    title: 'Billing Return | RakshaAI',
+    description: 'Returned from Stripe billing portal to RakshaAI billing.',
+  },
   '/call': {
     title: 'Voice Call | RakshaAI',
     description: 'Voice-enabled AI assistance from RakshaAI.',

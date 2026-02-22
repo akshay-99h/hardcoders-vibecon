@@ -27,6 +27,9 @@ function AppRouter() {
         <Route path="/chat" element={<ChatInterface />} />
         <Route path="/call" element={<AICall />} />
         <Route path="/billing" element={<BillingPage />} />
+        <Route path="/billing/checkout/success" element={<BillingPage />} />
+        <Route path="/billing/checkout/cancel" element={<BillingPage />} />
+        <Route path="/billing/return" element={<BillingPage />} />
         <Route path="/admin/*" element={<AdminConsole />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
