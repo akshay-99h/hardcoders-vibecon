@@ -6,6 +6,8 @@ import { cn } from '../lib/utils';
 import { useLanguage } from '../contexts/LanguageContext';
 import { t } from '../lib/translations';
 import LanguageToggle from './LanguageToggle';
+import { BackgroundSnippets } from './ui/background-snippets';
+import DotBackdrop from './ui/demo';
 
 function LandingPage() {
   const [theme, setTheme] = useState('light');
@@ -42,7 +44,9 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background transition-colors duration-300 overflow-hidden relative">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
+      <BackgroundSnippets />
+      <DotBackdrop />
+      <div className="absolute inset-0 -z-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 pointer-events-none" />
       
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -87,7 +91,7 @@ function LandingPage() {
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-20 flex items-center justify-center min-h-screen">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-12 items-center">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.1 }} className="text-left">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
               {t(language, 'landingPage.heroTitle')}{' '}
@@ -118,20 +122,24 @@ function LandingPage() {
               <p className="text-sm text-muted-foreground">{t(language, 'landingPage.copyright')}</p>
             </motion.div>
           </motion.div>
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} className="hidden lg:block">
-            <div className="aspect-square rounded-2xl border-2 border-dashed border-border bg-muted/30 p-12 flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-24 h-24 bg-primary/10 rounded-2xl mx-auto mb-6 flex items-center justify-center">
-                  <svg className="w-12 h-12 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <p className="text-sm text-muted-foreground font-medium">Hero Image Placeholder</p>
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} className="relative">
+            <div className="relative mx-auto w-full max-w-md lg:max-w-xl">
+              <div className="absolute -inset-2 rounded-[2rem] bg-gradient-to-r from-primary/35 via-primary/10 to-transparent blur-xl opacity-75"></div>
+              <div className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/80 shadow-2xl">
+                <img
+                  src="/images/comic-strip.png"
+                  alt="RakshaAI helping a citizen understand a legal notice"
+                  className="w-full h-auto object-cover"
+                  loading="eager"
+                  onError={(event) => {
+                    event.currentTarget.src = 'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=1200&q=80';
+                  }}
+                />
               </div>
             </div>
           </motion.div>
         </div>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.8 }} className="lg:hidden absolute bottom-8 left-0 right-0 flex flex-col items-center gap-3">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.8 }} className="lg:hidden mt-10 flex flex-col items-center gap-3">
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
             <button onClick={() => window.location.href = '/terms'} className="hover:text-foreground transition-colors">{t(language, 'landingPage.termsOfService')}</button>
             <button onClick={() => window.location.href = '/privacy'} className="hover:text-foreground transition-colors">{t(language, 'landingPage.privacyPolicy')}</button>

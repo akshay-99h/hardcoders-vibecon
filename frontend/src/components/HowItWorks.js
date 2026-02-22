@@ -41,6 +41,114 @@ function HowItWorks() {
     }
   ];
 
+  const renderStepGraphic = (stepNum) => {
+    if (stepNum === 1) {
+      return (
+        <div className="rounded-xl border border-border/70 bg-card p-4 sm:p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center">
+              <span className="text-sm font-bold text-primary">U</span>
+            </div>
+            <div className="flex-1">
+              <div className="h-2.5 w-24 rounded-full bg-primary/20 mb-1.5" />
+              <div className="h-2.5 w-16 rounded-full bg-muted" />
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+              <svg className="w-4 h-4 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4m-2 0h12v9H6v-9z" />
+              </svg>
+            </div>
+          </div>
+          <div className="rounded-lg bg-muted/50 border border-border px-3 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-white border border-border flex items-center justify-center text-[10px] font-bold text-blue-600">
+                G
+              </div>
+              <div className="h-2 w-24 rounded-full bg-muted-foreground/25" />
+            </div>
+            <div className="w-5 h-5 rounded bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">
+              +
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (stepNum === 2) {
+      return (
+        <div className="rounded-xl border border-border/70 bg-card p-4 sm:p-5">
+          <div className="space-y-2.5 mb-4">
+            <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-primary/10 border border-primary/20 px-3 py-2">
+              <div className="h-2 w-32 rounded-full bg-primary/35 mb-1.5" />
+              <div className="h-2 w-20 rounded-full bg-primary/25" />
+            </div>
+            <div className="max-w-[84%] ml-auto rounded-2xl rounded-tr-sm bg-muted border border-border px-3 py-2">
+              <div className="h-2 w-36 rounded-full bg-muted-foreground/25 mb-1.5" />
+              <div className="h-2 w-28 rounded-full bg-muted-foreground/20" />
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-background px-3 py-2 flex items-center gap-2">
+            <div className="h-2 w-full rounded-full bg-muted" />
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-4-4l4 4-4 4" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (stepNum === 3) {
+      return (
+        <div className="rounded-xl border border-border/70 bg-card p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex-1 rounded-lg border border-border bg-muted/40 p-3">
+              <div className="h-2.5 w-24 rounded-full bg-primary/25 mb-3" />
+              <div className="space-y-2">
+                {[1, 2, 3].map((idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-700 text-[10px] flex items-center justify-center font-bold">
+                      {idx}
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted-foreground/20" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-center">
+              <HiSparkles className="w-6 h-6 text-primary" />
+            </div>
+          </div>
+          <div className="mt-3 h-2.5 w-40 rounded-full bg-muted-foreground/20" />
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-xl border border-border/70 bg-card p-4 sm:p-5">
+        <div className="mb-4">
+          <div className="h-2.5 rounded-full bg-muted mb-2">
+            <div className="h-2.5 w-[75%] rounded-full bg-primary/60" />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[1, 2, 3].map((idx) => (
+              <div key={idx} className="rounded-md border border-border bg-muted/40 px-2 py-2 flex items-center justify-center">
+                <div className="w-4 h-4 rounded-full bg-primary/15 text-[10px] font-semibold text-primary flex items-center justify-center">
+                  {idx}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="h-2 w-24 rounded-full bg-muted-foreground/20" />
+          <div className="h-2 w-20 rounded-full bg-primary/45" />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
       <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -123,18 +231,11 @@ function HowItWorks() {
                     {t(language, `howItWorks.step${stepNum}Title`)}
                   </h2>
                 </div>
-                <p className="text-base text-muted-foreground mb-6 ml-16">
+                <p className="text-base text-muted-foreground mb-6 ml-0 sm:ml-16">
                   {t(language, `howItWorks.step${stepNum}Desc`)}
                 </p>
-                <div className="ml-16 rounded-lg border-2 border-dashed border-border bg-muted/30 p-12 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-primary/10 rounded-lg mx-auto mb-4 flex items-center justify-center">
-                      <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{t(language, 'howItWorks.imagePlaceholder')}</p>
-                  </div>
+                <div className="ml-0 sm:ml-16 rounded-lg border-2 border-border/70 bg-muted/20 p-4 sm:p-6">
+                  {renderStepGraphic(stepNum)}
                 </div>
               </motion.div>
             </div>

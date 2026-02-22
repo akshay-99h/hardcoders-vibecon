@@ -1,10 +1,53 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import api from '../utils/api';
+import { ChartTooltipContent } from '../components/ui/chart';
+import { AdminDataTable, SortableHeader } from '../components/admin/AdminDataTable';
+
+const CHART_COLORS = ['#0f49bd', '#3f83f8', '#7cb0ff', '#9ca3af', '#f59e0b'];
+
+function formatDate(value) {
+  if (!value) return '-';
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return '-';
+  }
+}
+
+function getCheckoutNoticeClasses(tone) {
+  if (tone === 'success') return 'border-emerald-400/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
+  if (tone === 'warning') return 'border-amber-400/40 bg-amber-500/10 text-amber-700 dark:text-amber-300';
+  if (tone === 'error') return 'border-destructive/40 bg-destructive/10 text-destructive';
+  return 'border-border bg-muted/40 text-foreground';
+}
+
+function SummaryCard({ label, value, hint }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
 
 function BillingPage() {
   const navigate = useNavigate();
   const location = useLocation();
+
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState({});
   const [billingMeta, setBillingMeta] = useState({ currency: 'INR', interval: 'month', stripe: {} });
@@ -24,7 +67,9 @@ function BillingPage() {
           api.get('/api/billing/plans'),
           api.get('/api/billing/status'),
         ]);
+
         setUser(meRes.data);
+
         const plansPayload = plansRes.data || {};
         setPlans(plansPayload.plans || {});
         setBillingMeta({
@@ -32,6 +77,7 @@ function BillingPage() {
           interval: plansPayload.interval || 'month',
           stripe: plansPayload.stripe || {},
         });
+
         let nextStatus = statusRes.data;
 
         const params = new URLSearchParams(location.search);
@@ -117,12 +163,97 @@ function BillingPage() {
     bootstrap();
   }, [navigate, location.search]);
 
-  const sortedPlans = useMemo(() => ['free', 'plus', 'pro', 'business'].filter((key) => plans[key]), [plans]);
+  const sortedPlans = useMemo(
+    () => ['free', 'plus', 'pro', 'business'].filter((key) => plans[key]),
+    [plans]
+  );
+
+  const activePlan = status?.plan_key || 'free';
+  const stripePublishableKey =
+    billingMeta?.stripe?.publishable_key || process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || '';
+  const stripeKeyPreview = stripePublishableKey ? `${stripePublishableKey.slice(0, 16)}...` : 'Not set';
+
+  const usageRows = useMemo(() => {
+    const metrics = status?.metrics || {};
+    return Object.entries(metrics).map(([metric, data]) => {
+      const used = Number(data.used || 0);
+      const limit = Number(data.limit || 0);
+      const remaining = Number(data.remaining || Math.max(limit - used, 0));
+      return {
+        metric,
+        metric_label: metric.replace(/_/g, ' '),
+        used,
+        limit,
+        remaining,
+        exhausted: Boolean(data.exhausted || (limit > 0 && used >= limit)),
+      };
+    });
+  }, [status]);
+
+  const usageChartData = useMemo(
+    () =>
+      usageRows.map((row) => ({
+        metric: row.metric_label,
+        used: row.used,
+        remaining: row.remaining,
+      })),
+    [usageRows]
+  );
+
+  const seatChartData = useMemo(
+    () => [
+      { label: 'Used', value: Number(status?.seat_used || 0) },
+      { label: 'Remaining', value: Number(status?.seats_remaining || 0) },
+    ],
+    [status]
+  );
+
+  const usageColumns = useMemo(
+    () => [
+      {
+        accessorKey: 'metric_label',
+        header: ({ column }) => <SortableHeader column={column} title="Metric" />,
+        cell: ({ row }) => <span className="capitalize">{row.original.metric_label}</span>,
+      },
+      {
+        accessorKey: 'used',
+        header: ({ column }) => <SortableHeader column={column} title="Used" />,
+        cell: ({ row }) => <span>{row.original.used}</span>,
+      },
+      {
+        accessorKey: 'limit',
+        header: ({ column }) => <SortableHeader column={column} title="Limit" />,
+        cell: ({ row }) => <span>{row.original.limit}</span>,
+      },
+      {
+        accessorKey: 'remaining',
+        header: ({ column }) => <SortableHeader column={column} title="Remaining" />,
+        cell: ({ row }) => <span>{row.original.remaining}</span>,
+      },
+      {
+        accessorKey: 'exhausted',
+        header: ({ column }) => <SortableHeader column={column} title="Status" />,
+        cell: ({ row }) => (
+          <span
+            className={`rounded-full px-2 py-1 text-xs ${
+              row.original.exhausted
+                ? 'bg-destructive/10 text-destructive'
+                : 'bg-primary/10 text-primary'
+            }`}
+          >
+            {row.original.exhausted ? 'Limit reached' : 'Available'}
+          </span>
+        ),
+      },
+    ],
+    []
+  );
 
   const handleUpgrade = async (planKey) => {
     setActionLoading(planKey);
     setError('');
     setCheckoutNotice(null);
+
     try {
       const response = await api.post('/api/billing/checkout-session', { plan_key: planKey });
       const checkoutUrl = response.data?.url;
@@ -141,6 +272,7 @@ function BillingPage() {
     setActionLoading('manage');
     setError('');
     setCheckoutNotice(null);
+
     try {
       const response = await api.post('/api/billing/customer-portal');
       const portalUrl = response.data?.url;
@@ -163,24 +295,21 @@ function BillingPage() {
     );
   }
 
-  const activePlan = status?.plan_key || 'free';
-  const stripePublishableKey = billingMeta?.stripe?.publishable_key || process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || '';
-  const stripeKeyPreview = stripePublishableKey ? `${stripePublishableKey.slice(0, 12)}...` : 'Not set';
-
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="flex items-center justify-between gap-3 mb-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Billing & Usage</h1>
+            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Billing & Usage</h1>
             <p className="text-sm text-muted-foreground">
               Logged in as {user?.name} ({user?.email})
             </p>
           </div>
-          <div className="flex gap-2">
+
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => navigate('/chat')}
-              className="px-3 py-2 rounded-lg border border-border text-foreground hover:bg-accent transition-colors"
+              className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-accent"
             >
               Back to Chat
             </button>
@@ -188,32 +317,22 @@ function BillingPage() {
               <button
                 onClick={handleManageSubscription}
                 disabled={actionLoading === 'manage'}
-                className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60 transition-opacity"
+                className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-60"
               >
                 {actionLoading === 'manage' ? 'Opening...' : 'Manage Subscription'}
               </button>
             )}
           </div>
-        </div>
+        </header>
 
         {error && (
-          <div className="mb-5 p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-destructive text-sm">
+          <div className="mb-5 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
             {error}
           </div>
         )}
 
         {checkoutNotice && (
-          <div
-            className={`mb-5 p-3 rounded-lg border text-sm ${
-              checkoutNotice.tone === 'success'
-                ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                : checkoutNotice.tone === 'warning'
-                  ? 'border-amber-400/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                  : checkoutNotice.tone === 'error'
-                    ? 'border-destructive/40 bg-destructive/10 text-destructive'
-                    : 'border-border bg-muted/40 text-foreground'
-            }`}
-          >
+          <div className={`mb-5 rounded-lg border p-3 text-sm ${getCheckoutNoticeClasses(checkoutNotice.tone)}`}>
             <p className="font-semibold">{checkoutNotice.title}</p>
             <p className="mt-1">{checkoutNotice.message}</p>
             {checkoutNotice.meta && <p className="mt-1 text-xs opacity-80">{checkoutNotice.meta}</p>}
@@ -221,30 +340,59 @@ function BillingPage() {
         )}
 
         {checkoutSyncing && (
-          <div className="mb-5 p-3 rounded-lg border border-border bg-muted/40 text-sm text-foreground">
+          <div className="mb-5 rounded-lg border border-border bg-muted/40 p-3 text-sm text-foreground">
             Syncing payment status from Stripe...
           </div>
         )}
 
-        <div className="mb-6 rounded-xl border border-border bg-card p-4">
-          <h3 className="text-sm font-semibold text-foreground">Stripe Test Mode</h3>
-          <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-            <div className="rounded-lg border border-border p-3">
-              <p className="text-xs text-muted-foreground">Secret key status</p>
-              <p className="font-medium text-foreground mt-1">{billingMeta?.stripe?.enabled ? 'Configured' : 'Missing'}</p>
-            </div>
-            <div className="rounded-lg border border-border p-3">
-              <p className="text-xs text-muted-foreground">Publishable key status</p>
-              <p className="font-medium text-foreground mt-1">{stripePublishableKey ? 'Configured' : 'Missing'}</p>
-            </div>
-            <div className="rounded-lg border border-border p-3">
-              <p className="text-xs text-muted-foreground">Publishable key preview</p>
-              <p className="font-mono text-xs text-foreground mt-1">{stripeKeyPreview}</p>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard label="Current Plan" value={(activePlan || 'free').toUpperCase()} hint={status?.subscription_status || 'inactive'} />
+          <SummaryCard label="Seat Limit" value={status?.seat_limit ?? 1} hint={`Used ${status?.seat_used ?? 0}`} />
+          <SummaryCard label="Seats Remaining" value={status?.seats_remaining ?? 0} hint={`Period ends ${formatDate(status?.current_period_end)}`} />
+          <SummaryCard label="Stripe Key" value={stripePublishableKey ? 'Configured' : 'Missing'} hint={stripeKeyPreview} />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+            <div className="mb-3">
+              <h3 className="text-base font-semibold text-foreground">Usage Breakdown</h3>
+              <p className="text-xs text-muted-foreground">Used vs remaining by feature quota.</p>
+            </div>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={usageChartData} margin={{ top: 6, right: 12, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis dataKey="metric" tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                  <Tooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="used" stackId="usage" fill="var(--primary)" radius={[0, 0, 4, 4]} />
+                  <Bar dataKey="remaining" stackId="usage" fill="#9ca3af" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+            <div className="mb-3">
+              <h3 className="text-base font-semibold text-foreground">Seat Allocation</h3>
+              <p className="text-xs text-muted-foreground">Current seat usage for this workspace.</p>
+            </div>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={seatChartData} dataKey="value" nameKey="label" innerRadius={55} outerRadius={88}>
+                    {seatChartData.map((item, index) => (
+                      <Cell key={`${item.label}-${item.value}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltipContent />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {sortedPlans.map((planKey) => {
             const plan = plans[planKey];
             const isActive = activePlan === planKey;
@@ -260,30 +408,32 @@ function BillingPage() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-foreground">{plan.label}</h2>
                   {isActive && (
-                    <span className="text-xs px-2 py-1 rounded-full bg-primary text-primary-foreground">
+                    <span className="rounded-full bg-primary px-2 py-1 text-xs text-primary-foreground">
                       Current
                     </span>
                   )}
                 </div>
-                <p className="text-2xl font-bold text-foreground mt-2">
+
+                <p className="mt-2 text-2xl font-bold text-foreground">
                   {isFree ? '₹0' : `₹${plan.price_inr_monthly}`}
-                  <span className="text-sm font-normal text-muted-foreground">/{billingMeta?.interval || 'month'}</span>
+                  <span className="text-sm font-normal text-muted-foreground">/{billingMeta.interval || 'month'}</span>
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Seats included: {plan.seats_included ?? 1}
-                </p>
-                <ul className="mt-3 text-sm text-muted-foreground space-y-1">
+
+                <p className="mt-1 text-xs text-muted-foreground">Seats included: {plan.seats_included ?? 1}</p>
+
+                <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
                   {Object.entries(plan.limits || {}).map(([metric, limit]) => (
                     <li key={metric}>
                       {metric.replace(/_/g, ' ')}: {limit}
                     </li>
                   ))}
                 </ul>
+
                 {!isActive && !isFree && (
                   <button
                     onClick={() => handleUpgrade(planKey)}
                     disabled={actionLoading === planKey}
-                    className="mt-4 w-full px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60 transition-opacity"
+                    className="mt-4 w-full rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-60"
                   >
                     {actionLoading === planKey ? 'Redirecting...' : `Choose ${plan.label}`}
                   </button>
@@ -293,43 +443,33 @@ function BillingPage() {
           })}
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Current Usage ({status?.period_key || '-'})</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div className="mt-6">
+          <AdminDataTable
+            title="Usage Metrics"
+            description="Sorted and paginated usage details for your current billing period."
+            data={usageRows}
+            columns={usageColumns}
+            initialPageSize={6}
+            pageSizeOptions={[6, 12, 24]}
+            emptyMessage="No usage data available for this period."
+          />
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <h3 className="text-base font-semibold text-foreground">Stripe Test Mode Snapshot</h3>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3 text-sm">
             <div className="rounded-lg border border-border p-3">
-              <p className="text-xs text-muted-foreground">Seat limit</p>
-              <p className="text-lg font-semibold text-foreground">{status?.seat_limit ?? 1}</p>
+              <p className="text-xs text-muted-foreground">Secret key status</p>
+              <p className="mt-1 font-medium text-foreground">{billingMeta?.stripe?.enabled ? 'Configured' : 'Missing'}</p>
             </div>
             <div className="rounded-lg border border-border p-3">
-              <p className="text-xs text-muted-foreground">Seats used</p>
-              <p className="text-lg font-semibold text-foreground">{status?.seat_used ?? 1}</p>
+              <p className="text-xs text-muted-foreground">Publishable key status</p>
+              <p className="mt-1 font-medium text-foreground">{stripePublishableKey ? 'Configured' : 'Missing'}</p>
             </div>
             <div className="rounded-lg border border-border p-3">
-              <p className="text-xs text-muted-foreground">Seats remaining</p>
-              <p className="text-lg font-semibold text-foreground">{status?.seats_remaining ?? 0}</p>
+              <p className="text-xs text-muted-foreground">Current period end</p>
+              <p className="mt-1 font-medium text-foreground">{formatDate(status?.current_period_end)}</p>
             </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(status?.metrics || {}).map(([metric, metricData]) => {
-              const limit = metricData.limit || 0;
-              const used = metricData.used || 0;
-              const ratio = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
-              const exhausted = Boolean(metricData.exhausted);
-              return (
-                <div key={metric} className="rounded-lg border border-border p-3">
-                  <p className="text-sm font-medium text-foreground capitalize">{metric.replace(/_/g, ' ')}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {used} / {limit}
-                  </p>
-                  <div className="w-full h-2 bg-muted rounded-full mt-2 overflow-hidden">
-                    <div
-                      className={`h-full ${exhausted ? 'bg-destructive' : 'bg-primary'}`}
-                      style={{ width: `${ratio}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
       </div>

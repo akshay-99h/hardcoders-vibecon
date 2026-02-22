@@ -9,6 +9,7 @@ import {
 } from 'hugeicons-react';
 import api from '../utils/api';
 import { ACTION_HUB_COPY, ACTION_HUB_SCHEMA } from '../config/actionHubConfig';
+import { Switch } from './ui/switch';
 
 function ChatInterface() {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ function ChatInterface() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [downloadMenuOpenFor, setDownloadMenuOpenFor] = useState(null);
   const [isRoleUpdating, setIsRoleUpdating] = useState(false);
   const [activeAction, setActiveAction] = useState(null);
   const [actionFormValues, setActionFormValues] = useState({});
@@ -41,6 +43,8 @@ function ChatInterface() {
   const [voiceState, setVoiceState] = useState('idle'); // idle, listening, thinking, speaking
   const [voiceVolume, setVoiceVolume] = useState(0); // Track mic volume for visual feedback
   const [isUserSpeaking, setIsUserSpeaking] = useState(false); // Track if user is actively speaking
+  const [automationButtonStates, setAutomationButtonStates] = useState({});
+  const [activeAutomationMessageId, setActiveAutomationMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -92,6 +96,17 @@ function ChatInterface() {
     const timeoutId = window.setTimeout(() => setActionToast(null), 2800);
     return () => window.clearTimeout(timeoutId);
   }, [actionToast]);
+
+  useEffect(() => {
+    const handleGlobalClick = (event) => {
+      if (!(event.target instanceof HTMLElement)) return;
+      if (event.target.closest('[data-download-menu="true"]')) return;
+      setDownloadMenuOpenFor(null);
+    };
+
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   const handleAuthCallback = async () => {
     setIsAuthenticating(true);
@@ -162,6 +177,8 @@ function ChatInterface() {
       const response = await api.get(`/api/conversations/${conversationId}`);
       setMessages(response.data.messages);
       setCurrentConversation(conversationId);
+      setAutomationButtonStates({});
+      setActiveAutomationMessageId(null);
       if (isMobile) setSidebarOpen(false);
     } catch (error) {
       console.error('Failed to load conversation:', error);
@@ -187,9 +204,11 @@ function ChatInterface() {
     setIsDark(!isDark);
   };
 
-  const toggleDemoAdminRole = async () => {
+  const toggleDemoAdminRole = async (forceAdmin = null) => {
     if (!user || isRoleUpdating) return;
-    const nextIsAdmin = user.role !== 'admin' && user.role !== 'superadmin';
+    const nextIsAdmin = typeof forceAdmin === 'boolean'
+      ? forceAdmin
+      : (user.role !== 'admin' && user.role !== 'superadmin');
     setIsRoleUpdating(true);
 
     try {
@@ -944,6 +963,8 @@ function ChatInterface() {
   const handleNewChat = () => {
     setCurrentConversation(null);
     setMessages([]);
+    setAutomationButtonStates({});
+    setActiveAutomationMessageId(null);
     if (isMobile) setSidebarOpen(false);
   };
 
@@ -1185,14 +1206,199 @@ function ChatInterface() {
       console.error('Failed to copy:', error);
     }
   };
+
+  const getMessageActionId = (message, index) => {
+    return String(message.timestamp || message.message_id || `msg-${index}`);
+  };
+
+  const setAutomationStateForMessage = (messageId, status, error = '') => {
+    setAutomationButtonStates((prev) => ({
+      ...prev,
+      [messageId]: { status, error }
+    }));
+  };
+
+  const getAutomationStateForMessage = (messageId) => {
+    return automationButtonStates[messageId]?.status || 'idle';
+  };
+
+  const getAutomationStateLabel = (status) => {
+    if (status === 'starting') return 'Starting';
+    if (status === 'running') return 'Running';
+    if (status === 'done') return 'Done';
+    if (status === 'error') return 'Error';
+    return 'Automate';
+  };
+
+  const getAutomationStateClasses = (status) => {
+    if (status === 'starting' || status === 'running') {
+      return 'bg-primary/10 text-primary border-primary/30';
+    }
+    if (status === 'done') {
+      return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30';
+    }
+    if (status === 'error') {
+      return 'bg-destructive/10 text-destructive border-destructive/30';
+    }
+    return 'text-muted-foreground hover:text-foreground hover:bg-accent border-border';
+  };
+
+  const extractMissionSteps = (content) => {
+    const steps = [];
+    const numberedStepRegex = /(?:^|\n)\s*\d+[.)]\s+([\s\S]*?)(?=(?:\n\s*\d+[.)]\s+)|$)/g;
+
+    let match;
+    while ((match = numberedStepRegex.exec(content)) !== null) {
+      const step = match[1]
+        .replace(/\n+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^[-*]\s+/, '')
+        .trim();
+      if (step) {
+        steps.push(step);
+      }
+    }
+
+    return steps;
+  };
+
+  const extractGovInUrl = (content) => {
+    const match = content.match(/https?:\/\/(?:[a-zA-Z0-9-]+\.)*gov\.in(?:\/[^\s)\]]*)?/i);
+    if (!match) return '';
+    return match[0].replace(/[.,;:!?]+$/, '');
+  };
+
+  const normalizeAutomationStatus = (automationState) => {
+    const normalizeValue = (value) => {
+      const normalized = String(value || '').toLowerCase();
+      if (['starting', 'running', 'queued', 'in_progress', 'processing'].includes(normalized)) return 'running';
+      if (['done', 'completed', 'success', 'succeeded', 'finished'].includes(normalized)) return 'done';
+      if (['error', 'failed', 'failure', 'cancelled', 'canceled'].includes(normalized)) return 'error';
+      if (['idle', 'ready', 'waiting', 'not_started', 'stopped'].includes(normalized)) return 'idle';
+      return 'running';
+    };
+
+    if (!automationState) return 'idle';
+    if (typeof automationState === 'string') {
+      return normalizeValue(automationState);
+    }
+    return normalizeValue(automationState.status || automationState.state || automationState.phase);
+  };
+
+  const handleAutomateMessage = async (message, messageId) => {
+    const currentStatus = getAutomationStateForMessage(messageId);
+    if (currentStatus === 'starting' || currentStatus === 'running') {
+      return;
+    }
+
+    setAutomationStateForMessage(messageId, 'starting');
+
+    try {
+      const statusResponse = await api.get('/api/automation/status');
+      if (!statusResponse.data?.extension_connected) {
+        setAutomationStateForMessage(messageId, 'error', 'Automation extension is not connected');
+        return;
+      }
+
+      const missionSteps = extractMissionSteps(message.content || '');
+      if (missionSteps.length === 0) {
+        setAutomationStateForMessage(messageId, 'error', 'No numbered steps found in this response');
+        return;
+      }
+
+      const portalUrl = extractGovInUrl(message.content || '');
+      const missionId = `mission_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const missionTitle = (missionSteps[0] || 'Automation Task').slice(0, 120);
+      const missionDescription = (message.content || '').trim().slice(0, 3000);
+
+      await api.post('/api/automation/start', {
+        mission_id: missionId,
+        mission_title: missionTitle,
+        mission_description: missionDescription,
+        portal_url: portalUrl,
+        mission_steps: missionSteps
+      });
+
+      setAutomationStateForMessage(messageId, 'running');
+      setActiveAutomationMessageId(messageId);
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const errorMessage = typeof detail === 'string' ? detail : 'Failed to start automation';
+      setAutomationStateForMessage(messageId, 'error', errorMessage);
+      console.error('Automation start failed:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!activeAutomationMessageId) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const pollAutomationStatus = async () => {
+      try {
+        const response = await api.get('/api/automation/status');
+        if (isCancelled) {
+          return;
+        }
+
+        const extensionConnected = Boolean(response.data?.extension_connected);
+        const automationState = response.data?.automation_state;
+
+        if (!extensionConnected) {
+          setAutomationStateForMessage(activeAutomationMessageId, 'error', 'Automation extension disconnected');
+          setActiveAutomationMessageId(null);
+          return;
+        }
+
+        const normalizedStatus = normalizeAutomationStatus(automationState);
+        if (normalizedStatus === 'running') {
+          setAutomationStateForMessage(activeAutomationMessageId, 'running');
+          return;
+        }
+
+        if (normalizedStatus === 'error') {
+          const errorMessage = typeof automationState === 'object'
+            ? (automationState?.error || automationState?.message || 'Automation failed')
+            : 'Automation failed';
+          setAutomationStateForMessage(activeAutomationMessageId, 'error', errorMessage);
+          setActiveAutomationMessageId(null);
+          return;
+        }
+
+        if (normalizedStatus === 'done' || normalizedStatus === 'idle') {
+          setAutomationStateForMessage(activeAutomationMessageId, 'done');
+          setActiveAutomationMessageId(null);
+        }
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+        setAutomationStateForMessage(activeAutomationMessageId, 'error', 'Status check failed');
+        setActiveAutomationMessageId(null);
+        console.error('Automation status polling failed:', error);
+      }
+    };
+
+    pollAutomationStatus();
+    const intervalId = window.setInterval(pollAutomationStatus, 5000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeAutomationMessageId]);
   
-  const handleDownloadPDF = async (message) => {
+  const handleDownloadDocument = async (message, format = 'pdf') => {
     if (isMetricLocked('pdf_exports')) {
       navigate('/billing');
       return;
     }
 
     try {
+      setDownloadMenuOpenFor(null);
+
       // Extract only the document portion (remove AI explanations)
       const cleanDocument = extractDocumentOnly(message.content);
       
@@ -1217,8 +1423,15 @@ function ChatInterface() {
         documentType = "Email_Draft";
       }
       
-      // Call PDF generation API
-      const response = await api.post('/api/generate-pdf', {
+      const isDocx = format === 'docx';
+      const endpoint = isDocx ? '/api/generate-docx' : '/api/generate-pdf';
+      const extension = isDocx ? 'docx' : 'pdf';
+      const contentType = isDocx
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : 'application/pdf';
+
+      // Call document generation API
+      const response = await api.post(endpoint, {
         document_type: documentType,
         document_content: cleanDocument,
         user_name: "Citizen"
@@ -1227,10 +1440,10 @@ function ChatInterface() {
       });
       
       // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: contentType }));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${documentType}_${Date.now()}.pdf`);
+      link.setAttribute('download', `${documentType}_${Date.now()}.${extension}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -1240,8 +1453,8 @@ function ChatInterface() {
     } catch (err) {
       const handled = await handleQuotaError(err);
       if (handled) return;
-      console.error('Failed to generate PDF:', err);
-      alert('Failed to generate PDF. Please try again.');
+      console.error(`Failed to generate ${format.toUpperCase()}:`, err);
+      alert(`Failed to generate ${format.toUpperCase()}. Please try again.`);
     }
   };
   
@@ -1351,8 +1564,12 @@ function ChatInterface() {
       'grievance regarding',
       'complaint regarding'
     ];
-    
+
     return indicators.some(indicator => content.includes(indicator)) && content.length > 200;
+  };
+
+  const getDownloadMenuId = (message, index) => {
+    return getMessageActionId(message, index);
   };
 
   // Show loading screen while authenticating
@@ -1428,7 +1645,7 @@ function ChatInterface() {
 
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-border flex-shrink-0">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3">
             {user?.picture ? (
               <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full" />
             ) : (
@@ -1440,27 +1657,33 @@ function ChatInterface() {
               <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
             </div>
           </div>
+
+          <div className="mt-3 space-y-1">
+            <button
+              onClick={() => navigate('/billing')}
+              className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
+            >
+              <span>Billing & Usage</span>
+              <ArrowRight01Icon size={14} />
+            </button>
+            {(user?.role === 'admin' || user?.role === 'superadmin') && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
+              >
+                <span>Admin Console</span>
+                <ArrowRight01Icon size={14} />
+              </button>
+            )}
+          </div>
+
           <button
             onClick={handleLogout}
-            className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+            className="w-full mt-3 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center gap-2"
           >
             <Logout01Icon size={16} />
             <span>Logout</span>
           </button>
-          <button
-            onClick={() => navigate('/billing')}
-            className="w-full mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
-          >
-            Billing & Usage
-          </button>
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <button
-              onClick={() => navigate('/admin')}
-              className="w-full mt-1 text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
-            >
-              Admin Console
-            </button>
-          )}
         </div>
       </div>
 
@@ -1482,6 +1705,16 @@ function ChatInterface() {
           </div>
           
           <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
+              <span className="text-xs text-muted-foreground">Admin</span>
+              <Switch
+                checked={user?.role === 'admin' || user?.role === 'superadmin'}
+                onCheckedChange={toggleDemoAdminRole}
+                disabled={isRoleUpdating}
+                aria-label="Toggle admin view"
+              />
+            </div>
+
             {/* Language Selector for Voice */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-xs">
               <span className="text-muted-foreground">Voice:</span>
@@ -1494,7 +1727,7 @@ function ChatInterface() {
                 <option value="hi">हिन्दी (Hindi)</option>
               </select>
             </div>
-            
+
             <button
               onClick={toggleTheme}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
@@ -1502,25 +1735,14 @@ function ChatInterface() {
               {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
             </button>
 
-            <button
-              onClick={toggleDemoAdminRole}
-              disabled={isRoleUpdating}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-60"
-              title="Demo role toggle (user/admin)"
-            >
-              <span className="text-xs text-muted-foreground hidden sm:inline">Admin</span>
-              <span
-                className={`relative w-9 h-5 rounded-full transition-colors ${
-                  user?.role === 'admin' || user?.role === 'superadmin' ? 'bg-primary' : 'bg-muted'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                    user?.role === 'admin' || user?.role === 'superadmin' ? 'translate-x-4' : 'translate-x-0.5'
-                  }`}
-                />
-              </span>
-            </button>
+            <div className="sm:hidden rounded-lg border border-border bg-muted/40 px-2 py-1.5">
+              <Switch
+                checked={user?.role === 'admin' || user?.role === 'superadmin'}
+                onCheckedChange={toggleDemoAdminRole}
+                disabled={isRoleUpdating}
+                aria-label="Toggle admin view"
+              />
+            </div>
           </div>
         </header>
 
@@ -1614,12 +1836,18 @@ function ChatInterface() {
               </div>
             )}
 
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
-              >
-                <div className="flex flex-col gap-2 max-w-[85%]">
+            {messages.map((message, index) => {
+              const menuId = getDownloadMenuId(message, index);
+              const isDownloadMenuOpen = downloadMenuOpenFor === menuId;
+              const automationStatus = getAutomationStateForMessage(menuId);
+              const automationError = automationButtonStates[menuId]?.error || '';
+
+              return (
+                <div
+                  key={index}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+                >
+                  <div className="flex flex-col gap-2 max-w-[85%]">
                   <div
                     className={`rounded-[1.4rem] px-5 py-3 ${
                       message.role === 'user'
@@ -1671,22 +1899,76 @@ function ChatInterface() {
                           <Copy01Icon size={16} />
                         )}
                       </button>
+
+                      <button
+                        onClick={() => handleAutomateMessage(message, menuId)}
+                        disabled={automationStatus === 'starting' || automationStatus === 'running'}
+                        className={`h-7 px-2.5 rounded-md text-[11px] font-medium border transition-colors inline-flex items-center gap-1.5 ${
+                          getAutomationStateClasses(automationStatus)
+                        } ${
+                          automationStatus === 'starting' || automationStatus === 'running'
+                            ? 'cursor-wait'
+                            : ''
+                        }`}
+                        title={automationError || 'Send this response to the automation extension'}
+                      >
+                        <span
+                          className={`inline-block w-1.5 h-1.5 rounded-full ${
+                            automationStatus === 'starting' || automationStatus === 'running'
+                              ? 'bg-primary animate-pulse'
+                              : automationStatus === 'done'
+                                ? 'bg-emerald-500'
+                                : automationStatus === 'error'
+                                  ? 'bg-destructive'
+                                  : 'bg-muted-foreground'
+                          }`}
+                        />
+                        <span>{getAutomationStateLabel(automationStatus)}</span>
+                      </button>
                       
-                      {/* PDF Download button - only for generated documents */}
+                      {/* Download button with format dropdown - only for generated documents */}
                       {isGeneratedDocument(message) && (
-                        <button
-                          onClick={() => handleDownloadPDF(message)}
-                          className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
-                          title="Download as PDF"
-                        >
-                          <Download01Icon size={16} />
-                        </button>
+                        <div className="relative" data-download-menu="true">
+                          <button
+                            onClick={() => {
+                              setDownloadMenuOpenFor(isDownloadMenuOpen ? null : menuId);
+                            }}
+                            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                            title="Download document"
+                            data-download-menu="true"
+                          >
+                            <Download01Icon size={16} />
+                          </button>
+
+                          {isDownloadMenuOpen && (
+                            <div
+                              className="absolute left-0 top-full mt-1 w-36 rounded-lg border border-border bg-card shadow-md z-20 p-1"
+                              data-download-menu="true"
+                            >
+                              <button
+                                onClick={() => handleDownloadDocument(message, 'pdf')}
+                                className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-accent rounded"
+                                data-download-menu="true"
+                              >
+                                Download .pdf
+                              </button>
+                              <button
+                                onClick={() => handleDownloadDocument(message, 'docx')}
+                                className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-accent rounded"
+                                data-download-menu="true"
+                              >
+                                Download .docx
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
+                </div>
+              );
+            })}
 
             {isLoading && (
               <div className="flex justify-start animate-fade-in">
