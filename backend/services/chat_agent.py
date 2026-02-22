@@ -2,16 +2,124 @@
 Chat Agent for RakshaAI
 Handles user queries with context-aware responses
 """
-from typing import Dict, Any
+import json
+import re
+from typing import Dict, Any, List, Optional
 from services.llm_service import LLMService
 from services.privacy_guard import PrivacyGuard
 from config.settings import settings
+
+
+def _web_search(query: str, max_results: int = 4) -> List[Dict[str, str]]:
+    """Search the web using DuckDuckGo. Returns list of {title, body, href}."""
+    try:
+        from ddgs import DDGS
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+            return results
+    except Exception as e:
+        print(f"[WebSearch] Error: {e}")
+        return []
+
+
+def _should_search(user_input: str) -> bool:
+    """Decide if we should search the web for this query."""
+    keywords = [
+        'how to', 'steps to', 'process for', 'procedure', 'apply for',
+        'renew', 'update', 'register', 'file', 'download', 'check status',
+        'track', 'portal', 'online', 'gov.in', 'aadhaar', 'pan card',
+        'passport', 'driving licence', 'voter id', 'ration card', 'rti',
+        'income tax', 'itr', 'epf', 'pf', 'esi', 'gst', 'fir',
+        'consumer complaint', 'birth certificate', 'death certificate',
+        'kaise', 'karna hai', 'kaise kare', 'tarika', 'process kya hai'
+    ]
+    lower = user_input.lower()
+    return any(k in lower for k in keywords)
+
+
+MACHINE_PLAN_SYSTEM = """You are a browser automation planner. You produce ONLY valid JSON — no markdown, no explanation, no text outside JSON.
+
+You receive a user goal and optional web search context. You output a JSON object describing how to automate the task on a government website.
+
+Rules:
+- Output MUST be a single JSON object, nothing else.
+- Every step has a "goal" (what to achieve), "selectors" (how to find the element), "action" (click/type/select/wait/navigate/scroll), and "verify" (how to confirm success).
+- Steps MUST have "condition" field: "always", or a CSS/text condition to check before executing.
+- Steps MUST have "fallback" field: what to do if the element is not found ("skip", "retry", or an alternative step description).
+- Steps MUST have "human_required" boolean: true if the step involves personal data (OTP, Aadhaar, password, captcha, payment, upload).
+- For navigation: use "action": "navigate", "url": "..."
+- For clicks: use "action": "click", "selectors": {"text": "...", "role": "...", "css": "...", "aria_label": "..."}
+- For typing: use "action": "type", "selectors": {...}, "value": "{{user_input}}" (placeholder)
+- For waiting: use "action": "wait", "wait_for": "selector or condition"
+- Include "domain_whitelist" with allowed domains.
+- Include "start_url" for the portal.
+- Include "goal" describing the overall objective.
+
+Example output:
+{
+  "goal": "Download Aadhaar card from UIDAI portal",
+  "start_url": "https://myaadhaar.uidai.gov.in",
+  "domain_whitelist": ["myaadhaar.uidai.gov.in", "uidai.gov.in"],
+  "steps": [
+    {
+      "id": 1,
+      "goal": "Navigate to the Aadhaar download page",
+      "action": "navigate",
+      "url": "https://myaadhaar.uidai.gov.in/genricDownloadAadhaar",
+      "condition": "always",
+      "fallback": "skip",
+      "human_required": false,
+      "verify": {"url_contains": "genricDownloadAadhaar"}
+    },
+    {
+      "id": 2,
+      "goal": "Select language if language selector is present",
+      "action": "click",
+      "selectors": {"text": "English", "role": "button"},
+      "condition": {"element_exists": "[class*='language'], [class*='lang-select']" },
+      "fallback": "skip",
+      "human_required": false,
+      "verify": {"page_changed": true}
+    },
+    {
+      "id": 3,
+      "goal": "Enter Aadhaar number",
+      "action": "type",
+      "selectors": {"css": "input[name*='aadhaar'], input[placeholder*='Aadhaar']", "aria_label": "Aadhaar Number"},
+      "value": "{{aadhaar_number}}",
+      "condition": "always",
+      "fallback": "retry",
+      "human_required": true,
+      "verify": {"element_has_value": true}
+    }
+  ]
+}"""
+
+
+def _is_procedural(user_input: str, ai_response: str) -> bool:
+    """Check if the response contains actionable procedural steps for a government portal."""
+    input_lower = user_input.lower()
+    # Must be about doing something on a portal
+    action_words = ['how to', 'steps to', 'process for', 'apply for', 'download', 'renew',
+                    'update', 'register', 'file', 'check status', 'track', 'kaise', 'karna hai']
+    has_action = any(w in input_lower for w in action_words)
+    # Response should have numbered steps and a .gov.in URL
+    has_steps = bool(re.search(r'\d+[.)\s]', ai_response))
+    has_portal = '.gov.in' in ai_response or '.gov.in' in input_lower
+    return has_action and has_steps and has_portal
 
 
 class ChatAgent:
     """Agent to convert user input (text/voice) into helpful guidance"""
     
     def __init__(self):
+        # Machine plan LLM (separate instance, strict JSON output)
+        self.plan_llm_service = LLMService(
+            system_message=MACHINE_PLAN_SYSTEM,
+            provider=settings.PRIMARY_PROVIDER,
+            model=settings.PRIMARY_MODEL
+        )
+
         system_message = """You are Raksha AI — a trusted legal, government services, and citizen rights assistant for India.
 
 ═══════════════════════════════════════════
@@ -287,7 +395,8 @@ VOICE MODE RESPONSE RULES:
             # Return the helpful response
             return {
                 "success": True,
-                "message": response
+                "message": response,
+                "web_context": web_context
             }
             
         except Exception as e:
@@ -296,3 +405,40 @@ VOICE MODE RESPONSE RULES:
                 "message": "I apologize, but I'm having trouble processing your request right now. Could you please try rephrasing your question?",
                 "details": str(e)
             }
+
+    async def generate_machine_plan(self, user_input: str, human_response: str, web_context: str = "") -> Optional[Dict[str, Any]]:
+        """Generate a structured machine plan for browser automation.
+        Only called when the human response contains procedural steps for a gov portal."""
+        if not _is_procedural(user_input, human_response):
+            return None
+
+        prompt = f"""User goal: {user_input}
+
+Human-readable guide (for reference — extract the portal URL and steps from this):
+{human_response[:3000]}
+"""
+        if web_context:
+            prompt += f"\nWeb search context:\n{web_context[:2000]}\n"
+
+        prompt += "\nGenerate the structured JSON automation plan. Output ONLY valid JSON, nothing else."
+
+        try:
+            raw = await self.plan_llm_service.send_message(prompt)
+            # Strip markdown code fences if present
+            cleaned = raw.strip()
+            if cleaned.startswith('```'):
+                cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+                cleaned = re.sub(r'\s*```$', '', cleaned)
+            plan = json.loads(cleaned)
+            # Validate minimal structure
+            if not isinstance(plan, dict) or 'steps' not in plan:
+                print(f"[MachinePlan] Invalid structure: {list(plan.keys()) if isinstance(plan, dict) else type(plan)}")
+                return None
+            return plan
+        except json.JSONDecodeError as e:
+            print(f"[MachinePlan] JSON parse error: {e}")
+            print(f"[MachinePlan] Raw output: {raw[:500] if raw else 'empty'}")
+            return None
+        except Exception as e:
+            print(f"[MachinePlan] Error: {e}")
+            return None
