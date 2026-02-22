@@ -77,6 +77,10 @@ class AutomationService:
                     "error": error_message,
                 }
                 session["last_error"] = error_message
+            elif message_type in {"stop", "stopped", "cancel", "cancelled"}:
+                session["automation_state"] = {
+                    "status": "idle",
+                }
             elif message_type in {"automation_done", "completed", "done", "success"}:
                 session["automation_state"] = {
                     "status": "done",
