@@ -60,7 +60,7 @@ app.add_middleware(
 
 # MongoDB connection
 mongo_client = AsyncIOMotorClient(settings.MONGO_URL)
-db = mongo_client.get_database()
+db = mongo_client.get_database(settings.DB_NAME)
 
 # Initialize services
 voice_service = VoiceService()
