@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RakshaAI Assistant</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 320px;
+      min-height: 180px;
+      background: #0f1829;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid #1e3a5f;
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+      background: #f97316;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 16px;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .header-text h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      color: #64748b;
+    }
+
+    .status-pill {
+      margin-left: auto;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .status-pill.connected { background: #14532d; color: #4ade80; }
+    .status-pill.disconnected { background: #3b0764; color: #c084fc; }
+    .status-pill.running { background: #1e3a5f; color: #60a5fa; }
+
+    .body { padding: 14px 16px; }
+
+    /* Idle state */
+    #idle-view .idle-msg {
+      color: #64748b;
+      font-size: 13px;
+      text-align: center;
+      padding: 20px 0;
+      line-height: 1.6;
+    }
+
+    /* Permission request */
+    #permission-view .mission-title {
+      font-weight: 700;
+      font-size: 15px;
+      color: #f97316;
+      margin-bottom: 4px;
+    }
+
+    #permission-view .mission-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    #permission-view .steps-count {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 14px;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 9px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: opacity 0.15s;
+    }
+
+    .btn:hover { opacity: 0.85; }
+
+    .btn-primary { background: #f97316; color: white; }
+    .btn-secondary { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .btn-danger { background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b; }
+
+    /* Running state */
+    #running-view .step-label {
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #f1f5f9;
+    }
+
+    #running-view .step-hint {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .progress-bar-wrap {
+      background: #1e293b;
+      border-radius: 999px;
+      height: 6px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: #f97316;
+      border-radius: 999px;
+      transition: width 0.4s ease;
+    }
+
+    .progress-text {
+      font-size: 11px;
+      color: #64748b;
+      margin-bottom: 10px;
+    }
+
+    /* Human required */
+    #human-view .human-label {
+      font-weight: 600;
+      color: #fbbf24;
+      margin-bottom: 6px;
+    }
+
+    #human-view .human-hint {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    /* Done state */
+    #done-view {
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    #done-view .done-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    #done-view .done-msg {
+      color: #4ade80;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    #done-view .done-sub {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #334155;
+      border-top-color: #f97316;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">R</div>
+    <div class="header-text">
+      <h1>RakshaAI</h1>
+      <p>Browser Assistant</p>
+    </div>
+    <div id="status-pill" class="status-pill disconnected">Offline</div>
+  </div>
+
+  <div class="body">
+    <!-- Idle -->
+    <div id="idle-view">
+      <p class="idle-msg">
+        Open RakshaAI and click <strong>"Automate"</strong> on any government service response to begin.
+      </p>
+    </div>
+
+    <!-- Permission request -->
+    <div id="permission-view" class="hidden">
+      <div class="mission-title" id="perm-title"></div>
+      <div class="mission-desc" id="perm-desc"></div>
+      <div class="steps-count" id="perm-steps"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-allow">Allow &amp; Start</button>
+        <button class="btn btn-secondary" id="btn-deny">Deny</button>
+      </div>
+    </div>
+
+    <!-- Running -->
+    <div id="running-view" class="hidden">
+      <div class="progress-text" id="progress-text">Step <span id="step-current">0</span> of <span id="step-total">0</span></div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+      </div>
+      <div class="step-label" id="step-label">
+        <span class="spinner"></span> Executing step...
+      </div>
+      <div class="step-hint" id="step-hint"></div>
+      <div class="btn-row">
+        <button class="btn btn-danger" id="btn-stop">Stop</button>
+      </div>
+    </div>
+
+    <!-- Human required -->
+    <div id="human-view" class="hidden">
+      <div class="human-label" id="human-label">Action required</div>
+      <div class="human-hint" id="human-hint"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-done">Done</button>
+        <button class="btn btn-danger" id="btn-stop-human">Stop</button>
+      </div>
+    </div>
+
+    <!-- Done -->
+    <div id="done-view" class="hidden">
+      <div class="done-icon">&#10003;</div>
+      <div class="done-msg">Task Complete</div>
+      <div class="done-sub" id="done-summary"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
