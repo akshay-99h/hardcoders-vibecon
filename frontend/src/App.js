@@ -6,6 +6,7 @@ import './App.css';
 import LandingPage from './components/LandingPage';
 import ChatInterface from './components/ChatInterface';
 import HowItWorks from './components/HowItWorks';
+import ProjectSlides from './components/ProjectSlides';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import AICall from './pages/AICall';
@@ -17,6 +18,7 @@ function AppRouter() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/how-it-works" element={<HowItWorks />} />
+      <Route path="/slides" element={<ProjectSlides />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/chat" element={<ChatInterface />} />

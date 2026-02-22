@@ -1195,6 +1195,11 @@ function ChatInterface() {
 
     // Clean the text for better speech
     let cleanText = message.content;
+
+    // Remove embedded media HTML/links before speaking.
+    cleanText = cleanText.replace(/<iframe[\s\S]*?<\/iframe>/gi, ' ');
+    cleanText = cleanText.replace(/<\/?[^>]+>/g, ' ');
+    cleanText = cleanText.replace(/https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)[^\s]*/gi, ' ');
     
     // Remove emojis
     cleanText = cleanText.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
@@ -1223,9 +1228,6 @@ function ChatInterface() {
     cleanText = cleanText.replace(/\s+/g, ' ').trim();
     
     if (!cleanText) return;
-    
-    // Check if text has exclamation marks for emphasis
-    const hasEmphasis = cleanText.includes('!');
     
     // Detect language
     const isHindi = /[\u0900-\u097F]/.test(cleanText);
@@ -1351,6 +1353,146 @@ function ChatInterface() {
     const match = content.match(/https?:\/\/(?:[a-zA-Z0-9-]+\.)*gov\.in(?:\/[^\s)\]]*)?/i);
     if (!match) return '';
     return match[0].replace(/[.,;:!?]+$/, '');
+  };
+
+  const MAX_ASSISTANT_VIDEO_EMBEDS = 2;
+
+  const extractYouTubeVideoId = (rawUrl) => {
+    if (!rawUrl || typeof rawUrl !== 'string') return null;
+
+    try {
+      const parsed = new URL(rawUrl.trim());
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+      let videoId = '';
+
+      if (host === 'youtu.be') {
+        videoId = parsed.pathname.replace(/^\//, '').split('/')[0];
+      } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+        if (parsed.pathname === '/watch') {
+          videoId = parsed.searchParams.get('v') || '';
+        } else if (parsed.pathname.startsWith('/embed/')) {
+          videoId = parsed.pathname.split('/')[2] || '';
+        } else if (parsed.pathname.startsWith('/shorts/')) {
+          videoId = parsed.pathname.split('/')[2] || '';
+        }
+      }
+
+      if (/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+        return videoId;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const parseAssistantVideoEmbeds = (content) => {
+    if (!content || typeof content !== 'string') {
+      return {
+        sanitizedText: '',
+        topVideos: [],
+        bottomVideos: []
+      };
+    }
+
+    const seenVideoIds = new Set();
+    const explicitTop = [];
+    const explicitBottom = [];
+    const unpositioned = [];
+
+    const addVideoCandidate = (source, title = '', placement = null) => {
+      const videoId = extractYouTubeVideoId(source);
+      if (!videoId || seenVideoIds.has(videoId)) return;
+
+      seenVideoIds.add(videoId);
+      const normalizedTitle = String(title || 'Related video').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Related video';
+      const candidate = { videoId, title: normalizedTitle };
+
+      if (placement === 'top') {
+        explicitTop.push(candidate);
+      } else if (placement === 'bottom') {
+        explicitBottom.push(candidate);
+      } else {
+        unpositioned.push(candidate);
+      }
+    };
+
+    const iframeRegex = /<iframe[\s\S]*?<\/iframe>/gi;
+    const iframeMatches = content.match(iframeRegex) || [];
+
+    iframeMatches.forEach((iframeHtml) => {
+      const srcMatch = iframeHtml.match(/src=(["'])(.*?)\1/i);
+      if (!srcMatch?.[2]) return;
+
+      const titleMatch = iframeHtml.match(/title=(["'])(.*?)\1/i);
+      const placementMatch = iframeHtml.match(/data-(?:placement|position)=(["'])(top|bottom)\1/i);
+      addVideoCandidate(srcMatch[2], titleMatch?.[2] || '', placementMatch?.[2] || null);
+    });
+
+    let sanitizedText = content.replace(iframeRegex, '').trim();
+
+    const markdownLinkRegex = /\[[^\]]+\]\((https?:\/\/[^\s)]+)\)/gi;
+    for (const match of sanitizedText.matchAll(markdownLinkRegex)) {
+      addVideoCandidate(match[1], '');
+    }
+
+    const plainUrlRegex = /https?:\/\/[^\s<]+/gi;
+    for (const match of sanitizedText.matchAll(plainUrlRegex)) {
+      addVideoCandidate(match[0], '');
+    }
+
+    const topVideos = [];
+    const bottomVideos = [];
+
+    const addWithinLimit = (list, video) => {
+      if (topVideos.length + bottomVideos.length >= MAX_ASSISTANT_VIDEO_EMBEDS) return;
+      list.push(video);
+    };
+
+    explicitTop.forEach((video) => addWithinLimit(topVideos, video));
+    explicitBottom.forEach((video) => addWithinLimit(bottomVideos, video));
+
+    unpositioned.forEach((video) => {
+      if (topVideos.length + bottomVideos.length >= MAX_ASSISTANT_VIDEO_EMBEDS) return;
+      if (topVideos.length === 0) {
+        topVideos.push(video);
+      } else {
+        bottomVideos.push(video);
+      }
+    });
+
+    sanitizedText = sanitizedText
+      .replace(/^\s*(?:[-*]\s*)?(?:https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)[^\s]*)\s*$/gim, '')
+      .replace(/^\s*(?:[-*]\s*)?\[[^\]]+\]\((https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)[^\s)]+)\)\s*$/gim, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    return {
+      sanitizedText,
+      topVideos,
+      bottomVideos
+    };
+  };
+
+  const renderYouTubeEmbed = (video, key) => {
+    return (
+      <div key={key} className="mb-3 overflow-hidden rounded-xl border border-border/80 bg-muted/20">
+        <div className="border-b border-border/70 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+          {video.title}
+        </div>
+        <div className="relative w-full pt-[56.25%] bg-black/70">
+          <iframe
+            src={`https://www.youtube.com/embed/${video.videoId}`}
+            title={video.title}
+            className="absolute inset-0 h-full w-full"
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      </div>
+    );
   };
 
   const normalizeAutomationStatus = (automationState) => {
@@ -1660,7 +1802,7 @@ function ChatInterface() {
   // Show loading screen while authenticating
   if (isAuthenticating) {
     return (
-      <div className="h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen h-[100dvh] bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-muted-foreground">Authenticating...</p>
@@ -1670,7 +1812,7 @@ function ChatInterface() {
   }
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden relative">
+    <div className="min-h-screen h-[100dvh] bg-background flex overflow-hidden relative">
       {/* Mobile backdrop */}
       {isMobile && sidebarOpen && (
         <button
@@ -1775,21 +1917,21 @@ function ChatInterface() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative z-10">
         {/* Chat Header */}
-        <header className="bg-card border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="bg-card border-b border-border px-3 sm:px-4 py-3 flex flex-wrap items-start sm:items-center justify-between gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
               <Menu01Icon size={20} />
             </button>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">RakshaAI Chat</h1>
-              <p className="text-xs text-muted-foreground">AI-powered legal & financial guidance</p>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-foreground truncate">RakshaAI Chat</h1>
+              <p className="hidden sm:block text-xs text-muted-foreground">AI-powered legal & financial guidance</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap justify-end gap-1.5 sm:gap-2">
             <div className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
               <span className="text-xs text-muted-foreground">Admin</span>
               <Switch
@@ -1801,12 +1943,12 @@ function ChatInterface() {
             </div>
 
             {/* Language Selector for Voice */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-xs">
-              <span className="text-muted-foreground">Voice:</span>
+            <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-muted text-xs">
+              <span className="hidden sm:inline text-muted-foreground">Voice:</span>
               <select
                 value={selectedLanguage}
                 onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="bg-transparent text-foreground font-medium outline-none cursor-pointer"
+                className="bg-transparent text-foreground text-xs sm:text-sm font-medium outline-none cursor-pointer max-w-[108px] sm:max-w-none"
               >
                 <option value="en">English</option>
                 <option value="hi">हिन्दी (Hindi)</option>
@@ -1815,7 +1957,7 @@ function ChatInterface() {
 
             <button
               onClick={toggleTheme}
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+              className="p-1.5 sm:p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
               {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
             </button>
@@ -1832,7 +1974,7 @@ function ChatInterface() {
         </header>
 
         {/* Messages Area - Fixed Height, Scrollable */}
-        <div className="flex-1 overflow-y-auto p-4 min-h-0">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 min-h-0">
           <div className="max-w-4xl mx-auto space-y-4">
             {actionToast && (
               <div
@@ -1926,13 +2068,16 @@ function ChatInterface() {
               const isDownloadMenuOpen = downloadMenuOpenFor === menuId;
               const automationStatus = getAutomationStateForMessage(menuId);
               const automationError = automationButtonStates[menuId]?.error || '';
+              const assistantMedia = message.role === 'assistant'
+                ? parseAssistantVideoEmbeds(message.content || '')
+                : null;
 
               return (
                 <div
                   key={index}
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
                 >
-                  <div className="flex flex-col gap-2 max-w-[85%]">
+                  <div className="flex flex-col gap-2 max-w-[90%] sm:max-w-[85%]">
                   <div
                     className={`rounded-[1.4rem] px-5 py-3 ${
                       message.role === 'user'
@@ -1952,16 +2097,26 @@ function ChatInterface() {
                       <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                     ) : (
                       <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-card-foreground prose-strong:text-foreground prose-ul:text-card-foreground prose-ol:text-card-foreground prose-li:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-foreground">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {message.content}
-                        </ReactMarkdown>
+                        {assistantMedia?.topVideos.map((video, videoIndex) =>
+                          renderYouTubeEmbed(video, `${menuId}-top-${video.videoId}-${videoIndex}`)
+                        )}
+
+                        {assistantMedia?.sanitizedText ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {assistantMedia.sanitizedText}
+                          </ReactMarkdown>
+                        ) : null}
+
+                        {assistantMedia?.bottomVideos.map((video, videoIndex) =>
+                          renderYouTubeEmbed(video, `${menuId}-bottom-${video.videoId}-${videoIndex}`)
+                        )}
                       </div>
                     )}
                   </div>
                   
                   {/* Action buttons for assistant messages */}
                   {message.role === 'assistant' && (
-                    <div className="flex items-center gap-2 px-2">
+                    <div className="flex flex-wrap items-center gap-2 px-2">
                       <button
                         onClick={() => handleTextToSpeech(message)}
                         className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
@@ -2082,13 +2237,13 @@ function ChatInterface() {
         </div>
 
         {/* Input Area - Fixed at Bottom */}
-        <div className="bg-card border-t border-border p-4 flex-shrink-0">
+        <div className="bg-card border-t border-border p-3 sm:p-4 flex-shrink-0" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}>
           <div className="max-w-4xl mx-auto">
             {/* Voice Conversation Mode UI */}
             {isInVoiceMode && (
-              <div className="mb-4 p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border-2 border-purple-500/30">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
+              <div className="mb-4 p-4 sm:p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border-2 border-purple-500/30">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-start gap-3 sm:gap-4 w-full">
                     <div className="relative">
                       <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
                         voiceState === 'listening' ? 'bg-purple-500' :
@@ -2105,7 +2260,7 @@ function ChatInterface() {
                       </div>
                     </div>
                     
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <h3 className="text-lg font-semibold text-foreground">
                         {voiceState === 'listening' && 'Listening...'}
                         {voiceState === 'thinking' && 'Processing...'}
@@ -2133,7 +2288,7 @@ function ChatInterface() {
                     </div>
                   </div>
                   
-                  <div className="flex gap-2">
+                  <div className="flex w-full justify-end gap-2 md:w-auto">
                     <button
                       onClick={endVoiceConversation}
                       className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:opacity-90 transition-all"
@@ -2172,7 +2327,7 @@ function ChatInterface() {
             
             {/* Regular Input Controls (Hidden in Voice Mode) */}
             {!isInVoiceMode && (
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 sm:gap-3">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -2185,7 +2340,7 @@ function ChatInterface() {
                   <button
                     onClick={startVoiceConversation}
                     disabled={isMetricLocked('stt_requests')}
-                    className={`p-3 rounded-lg transition-colors ${
+                    className={`p-2.5 sm:p-3 rounded-lg transition-colors ${
                       isMetricLocked('stt_requests')
                         ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -2198,7 +2353,7 @@ function ChatInterface() {
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isMetricLocked('document_analysis')}
-                    className={`p-3 rounded-lg transition-colors ${
+                    className={`p-2.5 sm:p-3 rounded-lg transition-colors ${
                       isMetricLocked('document_analysis')
                         ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -2211,7 +2366,7 @@ function ChatInterface() {
                   <button
                     onClick={isRecording ? handleStopRecording : handleStartRecording}
                     disabled={!isRecording && isMetricLocked('stt_requests')}
-                    className={`p-3 transition-colors rounded-lg ${
+                    className={`p-2.5 sm:p-3 transition-colors rounded-lg ${
                       isRecording
                         ? 'bg-destructive text-destructive-foreground animate-pulse'
                         : isMetricLocked('stt_requests')
@@ -2228,7 +2383,7 @@ function ChatInterface() {
                   </button>
                 </div>
 
-                <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
+                <div className="flex-1 bg-input rounded-[1.4rem] px-3 sm:px-5 py-2.5 sm:py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
                   <textarea
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
@@ -2243,7 +2398,7 @@ function ChatInterface() {
                 <button
                   onClick={handleSendMessage}
                   disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
-                  className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                  className="p-2.5 sm:p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
                   title={selectedFile ? "Analyze document" : "Send message"}
                 >
                   {isAnalyzing ? (

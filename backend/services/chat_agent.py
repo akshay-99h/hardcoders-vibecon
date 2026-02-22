@@ -141,6 +141,21 @@ AFTER generating:
 - Add filing instructions: where to send, fees, timeline, proof to keep
 
 ═══════════════════════════════════════════
+OPTIONAL VIDEO EMBEDS (WHEN CONTEXT PROVIDES THEM)
+═══════════════════════════════════════════
+
+If the knowledge context includes "VIDEO REFERENCES (YOUTUBE)" and the user query matches those topics:
+- You may include up to 2 YouTube iframe embeds.
+- Place one near the top and one near the end (if both are useful).
+- Use ONLY the provided embed URLs from context.
+- Never invent video IDs or channels.
+- Do NOT include video embeds in formal document drafts (RTI/complaint/email text).
+- Do NOT include video embeds when in voice/call mode.
+
+Allowed iframe format:
+<iframe src="https://www.youtube.com/embed/VIDEO_ID" title="Short helpful title" data-placement="top|bottom" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+═══════════════════════════════════════════
 EXAMPLE — COMPLEX CASE (Hindi)
 ═══════════════════════════════════════════
 
@@ -245,6 +260,14 @@ Keep your response concise but complete, and ensure all information is factual a
 If the user is asking about creating/renewing documents like Aadhaar or PAN, provide the specific steps.
 Keep your response concise but complete."""
 
+        if knowledge_context and not document_context and not fast_mode:
+            prompt += """
+
+VIDEO EMBED INSTRUCTION:
+- If the KNOWLEDGE BASE CONTEXT includes relevant VIDEO REFERENCES (YOUTUBE), include up to 2 iframe embeds.
+- Prefer one with data-placement="top" and one with data-placement="bottom".
+- Use only provided embed URLs; do not fabricate links."""
+
         if fast_mode:
             prompt += f"""
 
@@ -252,7 +275,8 @@ VOICE MODE RESPONSE RULES:
 - Keep the answer conversational and concise.
 - Put the most important action first.
 - Prefer short sentences and plain language.
-- Keep response under {settings.VOICE_MAX_RESPONSE_CHARS} characters when possible."""
+- Keep response under {settings.VOICE_MAX_RESPONSE_CHARS} characters when possible.
+- Do not include iframe HTML, URLs, or markdown-heavy formatting."""
         
         try:
             llm_service = self.voice_llm_service if fast_mode else self.llm_service

@@ -7,6 +7,24 @@
     "cert_in": {"url": "https://cert-in.org.in", "purpose": "Indian Computer Emergency Response Team"},
     "chakshu": {"url": "https://sancharsaathi.gov.in", "purpose": "Report spam calls/SMS and suspected fraud communications"}
   },
+  "video_references": [
+    {
+      "title": "Digital Arrest Scam Awareness (CyberDost, MHA)",
+      "youtube_url": "https://www.youtube.com/watch?v=9aR9RrGCFHA",
+      "embed_url": "https://www.youtube.com/embed/9aR9RrGCFHA",
+      "topics": ["scam", "digital arrest", "fraud", "cybercrime"],
+      "use_when": "User asks about scam calls, intimidation fraud, or cyber safety basics",
+      "default_placement": "top"
+    },
+    {
+      "title": "SBI Cycops Cyber Safety Awareness Video",
+      "youtube_url": "https://www.youtube.com/watch?v=oc8fzod5eHA",
+      "embed_url": "https://www.youtube.com/embed/oc8fzod5eHA",
+      "topics": ["bank fraud", "UPI fraud", "OTP", "phishing", "cyber safety"],
+      "use_when": "User asks about banking fraud prevention or safe digital payments",
+      "default_placement": "bottom"
+    }
+  ],
   "never_share": [
     "Aadhaar number or Aadhaar OTP",
     "PAN number",
