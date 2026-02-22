@@ -90,7 +90,7 @@ function LandingPage() {
         </div>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-8 lg:py-8 flex items-center justify-center min-h-screen lg:min-h-0 lg:h-full">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-8 lg:py-8 flex flex-col items-center justify-start lg:justify-center min-h-screen lg:min-h-0 lg:h-full gap-8 lg:gap-0">
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-12 items-center">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.1 }} className="text-center lg:text-left">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
@@ -139,7 +139,7 @@ function LandingPage() {
             </div>
           </motion.div>
         </div>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.8 }} className="lg:hidden mt-10 flex flex-col items-center gap-3">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.8 }} className="lg:hidden w-full mt-2 flex flex-col items-center gap-3">
           <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
             <button onClick={() => window.location.href = '/terms'} className="hover:text-foreground transition-colors">{t(language, 'landingPage.termsOfService')}</button>
             <button onClick={() => window.location.href = '/privacy'} className="hover:text-foreground transition-colors">{t(language, 'landingPage.privacyPolicy')}</button>

@@ -8,104 +8,84 @@ const SLIDES = [
   {
     id: 'cover',
     label: 'Opening',
-    notePrompt: 'Add your 20-second opening hook for this slide.',
   },
   {
     id: 'scorecard',
     label: 'Evaluation Fit',
-    notePrompt: 'Add one sentence on how judges should score this.',
   },
   {
     id: 'originality',
     label: 'Originality',
-    notePrompt: 'Add your strongest “why this is fresh” example.',
   },
   {
     id: 'validation',
     label: 'User Value',
-    notePrompt: 'Add your real user pain story and expected impact.',
   },
   {
     id: 'execution',
     label: 'Execution',
-    notePrompt: 'Add your favorite robust flow or edge-case save.',
   },
   {
     id: 'market',
     label: 'Story + Market',
-    notePrompt: 'Add your first 100 users plan and pricing angle.',
   },
   {
     id: 'emergent',
     label: 'Use of Emergent',
-    notePrompt: 'Add what was only possible because of Emergent.',
   },
   {
     id: 'team',
     label: 'Team Fit',
-    notePrompt: 'Add team strengths and execution velocity proof.',
   },
   {
     id: 'swot',
     label: 'SWOT',
-    notePrompt: 'Add 1 strategic move based on SWOT.',
   },
   {
     id: 'lean-canvas',
     label: 'Lean Canvas',
-    notePrompt: 'Add your chosen wedge and GTM narrative.',
   },
   {
     id: 'close',
     label: 'Close',
-    notePrompt: 'Add your final ask and demo call to action.',
   },
 ];
 
 const EVALUATION_CARDS = [
   {
     title: 'Originality & Clarity',
-    weight: 10,
     answer: 'Mission-mode, action-first guidance.',
   },
   {
     title: 'Validation / User Value',
-    weight: 25,
     answer: 'High-friction legal and gov workflows.',
   },
   {
     title: 'UI/UX + Polish + Robustness',
-    weight: 25,
     answer: 'End-to-end paths with guardrails.',
   },
   {
     title: 'Storytelling + Market Potential',
-    weight: 15,
     answer: 'Clear wedge and expansion path.',
   },
   {
     title: 'Use of Emergent',
-    weight: 15,
     answer: 'Integrated auth + full-stack speed.',
   },
   {
     title: 'Team-Product Fit',
-    weight: 10,
     answer: 'Domain + build + ship discipline.',
   },
 ];
 
-function MetricCard({ title, weight, answer }) {
+function MetricCard({ title, answer }) {
   return (
-    <div className="rounded-2xl border border-border bg-card/85 p-4">
-      <div className="flex items-center justify-between gap-3">
+    <div className="rounded-2xl border border-border bg-card/85 p-4 h-full">
+      <div className="flex items-start gap-2.5">
+        <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        <span className="text-xs font-semibold rounded-full bg-primary/12 text-primary px-2 py-1">{weight}%</span>
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">{answer}</p>
-      <div className="mt-3 h-1.5 rounded-full bg-muted overflow-hidden">
-        <div className="h-full bg-primary" style={{ width: `${weight * 4}%` }} />
-      </div>
+      <p className="mt-3 text-sm text-muted-foreground">{answer}</p>
     </div>
   );
 }
@@ -144,17 +124,31 @@ function SlideCard({ title, items, tone = 'default' }) {
   );
 }
 
+function VectorAccent({ className = '' }) {
+  return (
+    <svg
+      viewBox="0 0 240 240"
+      className={className}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="rakshaSlideGradient" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="currentColor" stopOpacity="0.65" />
+          <stop offset="100%" stopColor="currentColor" stopOpacity="0.05" />
+        </linearGradient>
+      </defs>
+      <circle cx="120" cy="120" r="90" fill="none" stroke="url(#rakshaSlideGradient)" strokeWidth="2.5" />
+      <circle cx="120" cy="120" r="62" fill="none" stroke="url(#rakshaSlideGradient)" strokeWidth="2" />
+      <path d="M36 144 C 72 84, 136 76, 196 102" fill="none" stroke="url(#rakshaSlideGradient)" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="72" cy="118" r="5.5" fill="currentColor" />
+      <circle cx="170" cy="102" r="4.5" fill="currentColor" />
+    </svg>
+  );
+}
+
 function ProjectSlides() {
   const navigate = useNavigate();
   const [slideIndex, setSlideIndex] = useState(0);
-  const [speakerNotes, setSpeakerNotes] = useState(() => {
-    try {
-      const raw = window.localStorage.getItem('raksha_slides_notes_v1');
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  });
 
   const activeSlide = SLIDES[slideIndex];
 
@@ -165,10 +159,6 @@ function ProjectSlides() {
   const goNext = useCallback(() => {
     setSlideIndex((prev) => Math.min(prev + 1, SLIDES.length - 1));
   }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem('raksha_slides_notes_v1', JSON.stringify(speakerNotes));
-  }, [speakerNotes]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -210,24 +200,19 @@ function ProjectSlides() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goNext, goPrev, navigate]);
 
-  const updateNote = (value) => {
-    setSpeakerNotes((prev) => ({
-      ...prev,
-      [activeSlide.id]: value,
-    }));
-  };
-
   const renderSlideContent = () => {
     switch (activeSlide.id) {
       case 'cover':
         return (
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-            <div className="rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/20 via-background to-background p-6 sm:p-8">
+          <div className="grid gap-4 lg:grid-cols-[1.3fr_0.95fr]">
+            <div className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/20 via-background to-background p-6 sm:p-8">
+              <VectorAccent className="absolute -right-12 -top-10 h-44 w-44 text-primary/30" />
+              <VectorAccent className="absolute -left-16 -bottom-16 h-52 w-52 text-primary/15" />
               <div className="flex items-center gap-2 text-primary mb-3">
                 <HiShieldCheck className="w-5 h-5" />
                 <span className="text-sm font-semibold uppercase tracking-wide">RakshaAI Project Deck</span>
               </div>
-              <h1 className="text-3xl sm:text-5xl font-black text-foreground leading-tight">
+              <h1 className="text-3xl sm:text-4xl xl:text-5xl font-black text-foreground leading-tight max-w-3xl">
                 Legal + Financial Guidance,
                 <span className="text-primary"> Ready to Execute</span>
               </h1>
@@ -243,18 +228,6 @@ function ProjectSlides() {
             </div>
 
             <div className="grid gap-4">
-              <div className="rounded-2xl border border-border bg-card/80 p-4">
-                <h3 className="text-sm font-semibold text-foreground mb-3">Evaluation Coverage</h3>
-                <div className="space-y-2">
-                  {EVALUATION_CARDS.map((metric) => (
-                    <div key={metric.title} className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{metric.title}</span>
-                      <span className="font-semibold text-foreground">{metric.weight}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               <div className="rounded-2xl border border-border bg-card/80 p-4">
                 <h3 className="text-sm font-semibold text-foreground mb-3">Live Product Surface</h3>
                 <div className="space-y-2">
@@ -272,24 +245,57 @@ function ProjectSlides() {
                   ))}
                 </div>
               </div>
+
+              <div className="relative overflow-hidden rounded-2xl border border-border bg-card/80 p-4">
+                <VectorAccent className="absolute -right-8 -bottom-10 h-32 w-32 text-emerald-400/35" />
+                <h3 className="text-sm font-semibold text-foreground mb-3">Demo Flow Snapshot</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Problem', 'Guidance', 'Draft', 'Export'].map((step) => (
+                    <div key={step} className="rounded-xl border border-border bg-background/70 p-2.5 text-xs font-medium text-muted-foreground text-center">
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         );
 
       case 'scorecard':
         return (
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground">How We Match The Judging Rubric</h2>
-            <p className="text-sm text-muted-foreground mt-2">Each metric is addressed with a direct product proof.</p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {EVALUATION_CARDS.map((metric) => (
-                <MetricCard
-                  key={metric.title}
-                  title={metric.title}
-                  weight={metric.weight}
-                  answer={metric.answer}
-                />
-              ))}
+          <div className="grid gap-4 lg:grid-cols-[1.25fr_0.85fr]">
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">How We Match The Judging Rubric</h2>
+              <p className="text-sm text-muted-foreground mt-2">Each evaluation lens is mapped to a visible product proof.</p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                {EVALUATION_CARDS.map((metric) => (
+                  <MetricCard
+                    key={metric.title}
+                    title={metric.title}
+                    answer={metric.answer}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="relative overflow-hidden rounded-2xl border border-border bg-card/80 p-5">
+              <VectorAccent className="absolute -right-10 -top-8 h-32 w-32 text-primary/25" />
+              <h3 className="text-sm font-semibold text-foreground mb-3">Narrative Arc</h3>
+              <div className="space-y-3">
+                {[
+                  'Clear problem framing',
+                  'Actionable workflow proof',
+                  'Execution quality in live paths',
+                  'Scalable GTM and team fit',
+                ].map((item, idx) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/15 text-primary text-xs font-semibold flex items-center justify-center">
+                      {idx + 1}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{item}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         );
@@ -298,7 +304,7 @@ function ProjectSlides() {
         return (
           <div className="grid gap-4 lg:grid-cols-2">
             <SlideCard
-              title="Originality & Clarity (10%)"
+              title="Originality & Clarity"
               tone="accent"
               items={[
                 'Insight: users need action packs, not long chat threads.',
@@ -328,7 +334,7 @@ function ProjectSlides() {
           <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
             <div className="grid gap-3">
               <SlideCard
-                title="Validation / User Value (25%)"
+                title="Validation / User Value"
                 tone="success"
                 items={[
                   'Targets painful, high-stakes citizen moments.',
@@ -378,7 +384,7 @@ function ProjectSlides() {
         return (
           <div className="grid gap-4">
             <SlideCard
-              title="UI/UX, Execution, Polish & Robustness (25%)"
+              title="UI/UX, Execution, Polish & Robustness"
               tone="accent"
               items={[
                 'Working paths: chat, voice, docs, export, billing.',
@@ -415,7 +421,7 @@ function ProjectSlides() {
         return (
           <div className="grid gap-4 lg:grid-cols-2">
             <SlideCard
-              title="Storytelling + Market Potential (15%)"
+              title="Storytelling + Market Potential"
               tone="accent"
               items={[
                 'Why now: rising digital service dependence.',
@@ -455,7 +461,7 @@ function ProjectSlides() {
         return (
           <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
             <SlideCard
-              title="Use of Emergent (15%)"
+              title="Use of Emergent"
               tone="accent"
               items={[
                 'OAuth-backed session flow integration.',
@@ -493,7 +499,7 @@ function ProjectSlides() {
         return (
           <div className="grid gap-4">
             <SlideCard
-              title="Team-Product Fit (10%)"
+              title="Team-Product Fit"
               tone="accent"
               items={[
                 'Strong full-stack ownership of the product loop.',
@@ -659,8 +665,10 @@ function ProjectSlides() {
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden">
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_15%_20%,rgba(15,73,189,0.18),transparent_40%),radial-gradient(circle_at_85%_10%,rgba(16,185,129,0.12),transparent_35%),radial-gradient(circle_at_50%_95%,rgba(15,73,189,0.12),transparent_45%)]" />
+      <VectorAccent className="pointer-events-none absolute -left-20 top-24 h-72 w-72 text-primary/10" />
+      <VectorAccent className="pointer-events-none absolute -right-20 bottom-16 h-80 w-80 text-emerald-400/10" />
 
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-6 pb-4">
+      <div className="relative max-w-[1280px] mx-auto px-3 sm:px-6 pt-5 pb-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
@@ -675,7 +683,8 @@ function ProjectSlides() {
         </div>
 
         <div className="rounded-3xl border border-border bg-background/75 backdrop-blur-sm shadow-lg p-3 sm:p-5">
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-max gap-2 pr-2">
             {SLIDES.map((slide, index) => {
               const isActive = index === slideIndex;
               return (
@@ -692,6 +701,7 @@ function ProjectSlides() {
                 </button>
               );
             })}
+            </div>
           </div>
 
           <AnimatePresence mode="wait">
@@ -701,22 +711,11 @@ function ProjectSlides() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -18 }}
               transition={{ duration: 0.22 }}
-              className="rounded-2xl border border-border bg-card/40 p-4 sm:p-6"
+              className="relative overflow-hidden rounded-2xl border border-border bg-card/40 p-4 sm:p-6 min-h-[58vh]"
             >
+              <VectorAccent className="absolute -right-16 top-8 h-40 w-40 text-primary/12" />
+              <VectorAccent className="absolute -left-16 bottom-4 h-36 w-36 text-emerald-400/15" />
               {renderSlideContent()}
-
-              <div className="mt-5 rounded-2xl border border-dashed border-border bg-background/70 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Your Pointers</p>
-                  <p className="text-xs text-muted-foreground">Saved locally on this browser</p>
-                </div>
-                <textarea
-                  value={speakerNotes[activeSlide.id] || ''}
-                  onChange={(event) => updateNote(event.target.value)}
-                  placeholder={activeSlide.notePrompt}
-                  className="w-full min-h-[95px] rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
             </motion.section>
           </AnimatePresence>
         </div>
