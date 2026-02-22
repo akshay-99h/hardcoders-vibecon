@@ -2,37 +2,10 @@
 Chat Agent for RakshaAI
 Handles user queries with context-aware responses
 """
-from typing import Dict, Any, List
+from typing import Dict, Any
 from services.llm_service import LLMService
 from services.privacy_guard import PrivacyGuard
 from config.settings import settings
-
-
-def _web_search(query: str, max_results: int = 4) -> List[Dict[str, str]]:
-    """Search the web using DuckDuckGo. Returns list of {title, body, href}."""
-    try:
-        from ddgs import DDGS
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-            return results
-    except Exception as e:
-        print(f"[WebSearch] Error: {e}")
-        return []
-
-
-def _should_search(user_input: str) -> bool:
-    """Decide if we should search the web for this query."""
-    keywords = [
-        'how to', 'steps to', 'process for', 'procedure', 'apply for',
-        'renew', 'update', 'register', 'file', 'download', 'check status',
-        'track', 'portal', 'online', 'gov.in', 'aadhaar', 'pan card',
-        'passport', 'driving licence', 'voter id', 'ration card', 'rti',
-        'income tax', 'itr', 'epf', 'pf', 'esi', 'gst', 'fir',
-        'consumer complaint', 'birth certificate', 'death certificate',
-        'kaise', 'karna hai', 'kaise kare', 'tarika', 'process kya hai'
-    ]
-    lower = user_input.lower()
-    return any(k in lower for k in keywords)
 
 
 class ChatAgent:
@@ -254,26 +227,8 @@ AI Response (ask first):
                 "detected": detected
             }
         
-        # Web search for procedural queries
-        web_context = ""
-        if not document_context and _should_search(user_input):
-            search_query = f"{user_input} step by step official India gov.in"
-            results = _web_search(search_query)
-            if results:
-                web_snippets = []
-                for r in results:
-                    title = r.get('title', '')
-                    body = r.get('body', '')
-                    href = r.get('href', '')
-                    web_snippets.append(f"- {title}: {body} ({href})")
-                web_context = "WEB SEARCH RESULTS (use these for accurate, up-to-date steps):\n" + "\n".join(web_snippets)
-        
         # Build prompt for helpful response
         prompt = ""
-        
-        # Add web search context
-        if web_context:
-            prompt += f"{web_context}\n\n"
         
         # Add document context first if available (most important)
         if document_context:
