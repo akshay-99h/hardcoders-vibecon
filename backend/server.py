@@ -1154,10 +1154,10 @@ async def end_ai_call(
 
 
 # ============================================================================
-# PDF GENERATION ENDPOINTS
+# DOCUMENT GENERATION ENDPOINTS
 # ============================================================================
 
-class PDFGenerationRequest(BaseModel):
+class DocumentGenerationRequest(BaseModel):
     document_type: str
     document_content: str
     user_name: Optional[str] = "Citizen"
@@ -1165,7 +1165,7 @@ class PDFGenerationRequest(BaseModel):
 
 @app.post("/api/generate-pdf")
 async def generate_pdf(
-    request: PDFGenerationRequest,
+    request: DocumentGenerationRequest,
     authorization: Optional[str] = Header(None),
     http_request: Request = None
 ):
@@ -1209,6 +1209,51 @@ async def generate_pdf(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+
+
+@app.post("/api/generate-docx")
+async def generate_docx(
+    request: DocumentGenerationRequest,
+    authorization: Optional[str] = Header(None),
+    http_request: Request = None
+):
+    """
+    Generate DOCX from document content
+
+    Request body:
+    {
+        "document_type": "RTI Application",
+        "document_content": "Full document text...",
+        "user_name": "User Name" (optional)
+    }
+
+    Returns: DOCX file as download
+    """
+    try:
+        user = await get_current_user(authorization, http_request)
+        await _enforce_feature_limit(user["user_id"], "pdf_exports", units=1)
+
+        docx_buffer = PDFGeneratorService.generate_document_docx(
+            document_type=request.document_type,
+            document_content=request.document_content,
+            user_name=request.user_name
+        )
+
+        filename = f"{request.document_type.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+
+        return StreamingResponse(
+            docx_buffer,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+
+    except Exception as e:
+        print(f"DOCX generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate DOCX: {str(e)}")
 
 
 if __name__ == "__main__":

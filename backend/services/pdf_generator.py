@@ -8,14 +8,64 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
 from reportlab.lib import colors
-from reportlab.pdfgen import canvas
 from io import BytesIO
 from datetime import datetime
+import re
 import uuid
 
 
 class PDFGeneratorService:
     """Service to generate professional PDF documents with official appearance"""
+
+    _MARKDOWN_BOLD_PATTERN = re.compile(
+        r"\*\*(?=\S)(.+?)(?<=\S)\*\*|\*(?=\S)(.+?)(?<=\S)\*"
+    )
+
+    @staticmethod
+    def _format_markdown_for_pdf(text: str) -> str:
+        """Escape XML entities and convert markdown asterisks to reportlab bold tags."""
+        escaped = (
+            text.replace('&', '&amp;')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;')
+        )
+
+        def _replace(match):
+            bold_text = match.group(1) or match.group(2) or ""
+            return f"<b>{bold_text}</b>"
+
+        return PDFGeneratorService._MARKDOWN_BOLD_PATTERN.sub(_replace, escaped)
+
+    @staticmethod
+    def _split_markdown_bold_segments(text: str):
+        """Split a line into plain/bold segments from markdown asterisk syntax."""
+        segments = []
+        last_index = 0
+
+        for match in PDFGeneratorService._MARKDOWN_BOLD_PATTERN.finditer(text):
+            start, end = match.span()
+            if start > last_index:
+                segments.append((text[last_index:start], False))
+
+            bold_text = match.group(1) or match.group(2) or ""
+            if bold_text:
+                segments.append((bold_text, True))
+            last_index = end
+
+        if last_index < len(text):
+            segments.append((text[last_index:], False))
+
+        return segments if segments else [(text, False)]
+
+    @staticmethod
+    def _add_markdown_line_to_docx(paragraph, text: str, *, force_bold: bool = False):
+        """Append a line to a DOCX paragraph and honor markdown asterisk bold markers."""
+        for segment, is_bold in PDFGeneratorService._split_markdown_bold_segments(text):
+            if not segment:
+                continue
+            run = paragraph.add_run(segment)
+            if force_bold or is_bold:
+                run.bold = True
     
     @staticmethod
     def _add_header_footer(canvas_obj, doc):
@@ -187,62 +237,60 @@ class PDFGeneratorService:
         in_body = False
         in_signature = False
         
-        for i, line in enumerate(lines):
-            line = line.strip()
-            
-            if not line:
+        for line in lines:
+            raw_line = line.strip()
+
+            if not raw_line:
                 # Empty line - add small spacer
                 elements.append(Spacer(1, 0.1*inch))
                 continue
-            
-            # Escape special characters
-            line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            
+
             # Detect different sections
-            line_lower = line.lower()
+            line_lower = raw_line.lower()
+            formatted_line = PDFGeneratorService._format_markdown_for_pdf(raw_line)
             
             # To/From address blocks
             if line_lower.startswith('to,') or line_lower.startswith('to:'):
                 in_address_block = True
-                elements.append(Paragraph(line, address_style))
+                elements.append(Paragraph(formatted_line, address_style))
             
             # Subject line
             elif line_lower.startswith('subject:'):
                 in_subject = True
                 in_address_block = False
-                elements.append(Paragraph(f"<b>{line}</b>", subject_style))
+                elements.append(Paragraph(formatted_line, subject_style))
             
             # Salutations
             elif any(sal in line_lower for sal in ['respected sir', 'dear sir', 'sir/madam', 'dear madam']):
                 in_body = True
                 in_subject = False
-                elements.append(Paragraph(line, salutation_style))
+                elements.append(Paragraph(formatted_line, salutation_style))
             
             # Closing (Yours faithfully, Thanking you, etc.)
             elif any(closing in line_lower for closing in ['yours faithfully', 'yours sincerely', 'thanking you', 'regards']):
                 in_body = False
                 in_signature = True
                 elements.append(Spacer(1, 0.15*inch))
-                elements.append(Paragraph(line, signature_style))
+                elements.append(Paragraph(formatted_line, signature_style))
             
             # Enclosures
             elif line_lower.startswith('enclosure'):
                 in_signature = True
                 elements.append(Spacer(1, 0.15*inch))
-                elements.append(Paragraph(f"<b>{line}</b>", signature_style))
+                elements.append(Paragraph(f"<b>{formatted_line}</b>", signature_style))
             
             # Address block lines
             elif in_address_block:
-                elements.append(Paragraph(line, address_style))
+                elements.append(Paragraph(formatted_line, address_style))
             
             # Signature block (name, address, phone)
             elif in_signature:
-                elements.append(Paragraph(line, signature_style))
+                elements.append(Paragraph(formatted_line, signature_style))
             
             # Body paragraphs
             else:
                 # Check if it's a heading/subheading
-                if (len(line) < 60 and line.isupper()) or line.endswith(':'):
+                if (len(raw_line) < 60 and raw_line.isupper()) or raw_line.endswith(':'):
                     heading_style = ParagraphStyle(
                         'Heading',
                         parent=styles['Heading3'],
@@ -253,10 +301,10 @@ class PDFGeneratorService:
                         fontName='Times-Bold',
                         leading=15
                     )
-                    elements.append(Paragraph(line, heading_style))
+                    elements.append(Paragraph(formatted_line, heading_style))
                 else:
                     # Regular body text
-                    elements.append(Paragraph(line, body_style))
+                    elements.append(Paragraph(formatted_line, body_style))
         
         # Add signature space
         elements.append(Spacer(1, 0.5*inch))
@@ -384,5 +432,104 @@ class PDFGeneratorService:
         doc.build(elements)
         
         # Reset buffer position
+        buffer.seek(0)
+        return buffer
+
+    @staticmethod
+    def generate_document_docx(
+        document_type: str,
+        document_content: str,
+        user_name: str = "Citizen"
+    ) -> BytesIO:
+        """
+        Generate a DOCX document from text content, preserving markdown asterisk bold markers.
+        """
+        try:
+            from docx import Document
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.shared import Pt
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "DOCX generation requires the 'python-docx' package. Install backend requirements first."
+            ) from exc
+
+        doc = Document()
+
+        normal_style = doc.styles['Normal']
+        normal_style.font.name = 'Times New Roman'
+        normal_style.font.size = Pt(12)
+
+        title = doc.add_paragraph(document_type.replace('_', ' ').strip() or "Document")
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_run = title.runs[0]
+        title_run.bold = True
+        title_run.font.size = Pt(14)
+
+        if user_name:
+            generated_for = doc.add_paragraph(f"Prepared for: {user_name}")
+            generated_for.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+        date_paragraph = doc.add_paragraph(f"Date: {datetime.now().strftime('%d %B %Y')}")
+        date_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        doc.add_paragraph("")
+
+        lines = document_content.split('\n')
+        in_address_block = False
+        in_signature = False
+
+        for line in lines:
+            raw_line = line.strip()
+            if not raw_line:
+                doc.add_paragraph("")
+                continue
+
+            line_lower = raw_line.lower()
+            paragraph = doc.add_paragraph()
+
+            if line_lower.startswith('to,') or line_lower.startswith('to:'):
+                in_address_block = True
+                in_signature = False
+                PDFGeneratorService._add_markdown_line_to_docx(paragraph, raw_line)
+                continue
+
+            if line_lower.startswith('subject:'):
+                in_address_block = False
+                PDFGeneratorService._add_markdown_line_to_docx(paragraph, raw_line, force_bold=True)
+                continue
+
+            if any(sal in line_lower for sal in ['respected sir', 'dear sir', 'sir/madam', 'dear madam']):
+                in_signature = False
+                PDFGeneratorService._add_markdown_line_to_docx(paragraph, raw_line)
+                continue
+
+            if any(closing in line_lower for closing in ['yours faithfully', 'yours sincerely', 'thanking you', 'regards']):
+                in_signature = True
+                PDFGeneratorService._add_markdown_line_to_docx(paragraph, raw_line)
+                continue
+
+            if line_lower.startswith('enclosure'):
+                in_signature = True
+                PDFGeneratorService._add_markdown_line_to_docx(paragraph, raw_line, force_bold=True)
+                continue
+
+            if in_address_block or in_signature:
+                PDFGeneratorService._add_markdown_line_to_docx(paragraph, raw_line)
+                continue
+
+            if (len(raw_line) < 60 and raw_line.isupper()) or raw_line.endswith(':'):
+                PDFGeneratorService._add_markdown_line_to_docx(paragraph, raw_line, force_bold=True)
+            else:
+                PDFGeneratorService._add_markdown_line_to_docx(paragraph, raw_line)
+
+        doc.add_paragraph("")
+        disclaimer = doc.add_paragraph(
+            "DISCLAIMER: This document has been generated by RakshaAI. "
+            "Please review all details before submission."
+        )
+        if disclaimer.runs:
+            disclaimer.runs[0].italic = True
+
+        buffer = BytesIO()
+        doc.save(buffer)
         buffer.seek(0)
         return buffer
