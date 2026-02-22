@@ -1913,6 +1913,13 @@ function ChatInterface() {
 
           <div className="mt-3 space-y-1">
             <button
+              onClick={() => navigate('/contact')}
+              className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
+            >
+              <span>Contact Us</span>
+              <ArrowRight01Icon size={14} />
+            </button>
+            <button
               onClick={() => navigate('/billing')}
               className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
             >

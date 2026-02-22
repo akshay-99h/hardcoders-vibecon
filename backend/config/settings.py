@@ -41,6 +41,15 @@ class Settings:
     
     # Session configuration
     SESSION_EXPIRY_DAYS = 7
+
+    # Frontend URLS
+    FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    CONTACT_US_PATH = os.getenv("CONTACT_US_PATH", "/contact")
+
+    # Email notifications (Resend)
+    RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+    RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "rakshaai@axhost.com")
+    LOGIN_ALERT_EMAIL_ENABLED = os.getenv("LOGIN_ALERT_EMAIL_ENABLED", "true").lower() == "true"
     
     # Official domains allowlist
     OFFICIAL_DOMAINS = [

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-const PUBLIC_ROUTES = new Set(['/', '/how-it-works', '/slides', '/privacy', '/terms']);
+const PUBLIC_ROUTES = new Set(['/', '/how-it-works', '/slides', '/privacy', '/terms', '/contact']);
 
 const ROUTE_SEO = {
   '/': {
@@ -50,6 +50,10 @@ const ROUTE_SEO = {
   '/call': {
     title: 'Voice Call | RakshaAI',
     description: 'Voice-enabled AI assistance from RakshaAI.',
+  },
+  '/contact': {
+    title: 'Contact Us | RakshaAI',
+    description: 'Submit grievances, support requests, and suspicious-login reports to RakshaAI.',
   },
 };
 

@@ -4,6 +4,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
+from typing import Literal
+import asyncio
 import os
 import uuid
 import base64
@@ -24,6 +26,7 @@ from services.ai_call_service import ai_call_service
 from services.pdf_generator import PDFGeneratorService
 from services.billing_service import BillingService
 from services.automation_service import automation_service
+from services.email_service import EmailService
 
 # Helper function to serialize datetime objects
 def serialize_doc(doc):
@@ -65,6 +68,7 @@ chat_agent = ChatAgent()
 context_service = ContextService()
 vision_service = VisionService()
 billing_service = BillingService(db)
+email_service = EmailService()
 
 # Load context files on startup
 @app.on_event("startup")
@@ -72,6 +76,10 @@ async def startup_event():
     """Initialize services on startup"""
     print("Loading knowledge base context files...")
     context_service.load_context_files()
+    await db.grievances.create_index("grievance_id", unique=True)
+    await db.grievances.create_index([("user_id", 1), ("created_at", -1)])
+    await db.grievances.create_index([("status", 1), ("created_at", -1)])
+    await db.login_audit_logs.create_index([("user_id", 1), ("created_at", -1)])
 
 # Pydantic Models
 class ChatMessage(BaseModel):
@@ -109,6 +117,18 @@ class SeatUpdateRequest(BaseModel):
     seat_used: Optional[int] = None
 
 
+class ContactGrievanceRequest(BaseModel):
+    topic: str
+    message: str
+    contact_name: str
+    contact_email: str
+
+
+class GrievanceStatusUpdateRequest(BaseModel):
+    status: Literal["open", "in_review", "resolved", "closed"]
+    admin_note: Optional[str] = ""
+
+
 class AutomationStartRequest(BaseModel):
     mission_id: str
     mission_title: str
@@ -124,6 +144,60 @@ def _is_admin(user: Dict[str, Any]) -> bool:
 def _require_admin(user: Dict[str, Any]):
     if not _is_admin(user):
         raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def _resolve_client_ip(request: Optional[Request]) -> str:
+    if request is None:
+        return "unknown"
+
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+
+    if request.client and request.client.host:
+        return request.client.host
+
+    return "unknown"
+
+
+def _resolve_device_and_browser(user_agent: str) -> Dict[str, str]:
+    ua = (user_agent or "").lower()
+
+    if "ipad" in ua:
+        device = "iPad"
+    elif "iphone" in ua:
+        device = "iPhone"
+    elif "android" in ua and "mobile" in ua:
+        device = "Android phone"
+    elif "android" in ua:
+        device = "Android tablet"
+    elif "windows" in ua:
+        device = "Windows desktop"
+    elif "macintosh" in ua or "mac os x" in ua:
+        device = "Mac desktop"
+    elif "linux" in ua:
+        device = "Linux desktop"
+    else:
+        device = "Unknown device"
+
+    if "edg/" in ua:
+        browser = "Microsoft Edge"
+    elif "chrome/" in ua and "chromium" not in ua:
+        browser = "Google Chrome"
+    elif "safari/" in ua and "chrome/" not in ua:
+        browser = "Safari"
+    elif "firefox/" in ua:
+        browser = "Mozilla Firefox"
+    elif "opr/" in ua or "opera" in ua:
+        browser = "Opera"
+    else:
+        browser = "Unknown browser"
+
+    return {"device": device, "browser": browser}
 
 
 async def _enforce_feature_limit(user_id: str, metric: str, units: int = 1):
@@ -182,6 +256,25 @@ async def _get_user_by_session_token(session_token: str):
         )
 
     return serialize_doc(user_doc)
+
+
+async def _get_optional_user(
+    authorization: Optional[str] = None,
+    request: Optional[Request] = None,
+) -> Optional[Dict[str, Any]]:
+    session_token = None
+    if authorization and authorization.startswith("Bearer "):
+        session_token = authorization.replace("Bearer ", "")
+    elif request and "session_token" in request.cookies:
+        session_token = request.cookies.get("session_token")
+
+    if not session_token:
+        return None
+
+    try:
+        return await _get_user_by_session_token(session_token)
+    except HTTPException:
+        return None
 
 # ============== AUTH ENDPOINTS ==============
 
@@ -265,6 +358,31 @@ async def create_session(request: Request):
     user_data = serialize_doc(user_doc)
 
     await billing_service.ensure_customer(user_data)
+
+    # Audit login context and send security alert email (non-blocking, best effort)
+    user_agent = request.headers.get("user-agent", "")
+    client_ip = _resolve_client_ip(request)
+    resolved = _resolve_device_and_browser(user_agent)
+    login_context = {
+        "ip": client_ip,
+        "device": resolved["device"],
+        "browser": resolved["browser"],
+        "user_agent": user_agent or "Unknown",
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.login_audit_logs.insert_one(
+        {
+            "user_id": user_id,
+            "email": user_data.get("email"),
+            "name": user_data.get("name"),
+            **login_context,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+
+    if email_service.enabled:
+        asyncio.create_task(email_service.send_login_alert_email(user_data, login_context))
     
     response = JSONResponse(content=user_data)
     response.set_cookie(
@@ -319,6 +437,84 @@ async def toggle_demo_role(
     )
 
     return {"success": True, "user_id": user["user_id"], "role": next_role}
+
+
+# ============== CONTACT / GRIEVANCE ENDPOINTS ==============
+
+@app.post("/api/contact/grievances")
+async def submit_contact_grievance(
+    payload: ContactGrievanceRequest,
+    authorization: Optional[str] = Header(None),
+    request: Request = None,
+):
+    user = await _get_optional_user(authorization, request)
+
+    topic = (payload.topic or "").strip()
+    message = (payload.message or "").strip()
+    contact_name = (payload.contact_name or "").strip()
+    contact_email = (payload.contact_email or "").strip()
+
+    if not topic:
+        raise HTTPException(status_code=400, detail="Topic is required")
+    if len(message) < 10:
+        raise HTTPException(status_code=400, detail="Message is too short")
+    if not contact_name:
+        raise HTTPException(status_code=400, detail="Contact name is required")
+    if "@" not in contact_email or "." not in contact_email:
+        raise HTTPException(status_code=400, detail="Valid contact email is required")
+
+    grievance_id = f"grv_{uuid.uuid4().hex[:10]}"
+    now = datetime.now(timezone.utc)
+    client_ip = _resolve_client_ip(request)
+    user_agent = request.headers.get("user-agent", "")
+    resolved = _resolve_device_and_browser(user_agent)
+
+    grievance_doc = {
+        "grievance_id": grievance_id,
+        "user_id": user.get("user_id") if user else None,
+        "user_email": user.get("email") if user else contact_email,
+        "user_name": user.get("name") if user else contact_name,
+        "topic": topic[:120],
+        "message": message[:4000],
+        "contact_name": contact_name[:120],
+        "contact_email": contact_email[:320],
+        "status": "open",
+        "admin_note": "",
+        "source_ip": client_ip,
+        "source_device": resolved["device"],
+        "source_browser": resolved["browser"],
+        "is_authenticated": bool(user),
+        "user_agent": user_agent[:1000],
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    await db.grievances.insert_one(grievance_doc)
+
+    return {
+        "success": True,
+        "ticket_id": grievance_id,
+        "status": "open",
+        "created_at": now.isoformat(),
+    }
+
+
+@app.get("/api/contact/grievances")
+async def list_my_grievances(
+    limit: int = Query(default=30, ge=1, le=100),
+    authorization: Optional[str] = Header(None),
+    request: Request = None,
+):
+    user = await get_current_user(authorization, request)
+    grievances = []
+
+    async for item in db.grievances.find(
+        {"user_id": user["user_id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(limit):
+        grievances.append(serialize_doc(item))
+
+    return {"grievances": grievances, "limit": limit}
 
 
 # ============== BILLING ENDPOINTS ==============
@@ -598,6 +794,82 @@ async def admin_update_user_seats(
         }
     )
     return {"success": True, **seat_result}
+
+
+@app.get("/api/admin/grievances")
+async def admin_list_grievances(
+    limit: int = Query(default=200, ge=1, le=500),
+    skip: int = Query(default=0, ge=0),
+    status: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(None),
+    request: Request = None,
+):
+    actor = await get_current_user(authorization, request)
+    _require_admin(actor)
+
+    query: Dict[str, Any] = {}
+    if status:
+        query["status"] = status
+
+    grievances = []
+    async for item in db.grievances.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit):
+        grievances.append(serialize_doc(item))
+
+    total = await db.grievances.count_documents(query)
+    return {
+        "grievances": grievances,
+        "total": total,
+        "limit": limit,
+        "skip": skip,
+        "status": status,
+    }
+
+
+@app.put("/api/admin/grievances/{grievance_id}")
+async def admin_update_grievance(
+    grievance_id: str,
+    payload: GrievanceStatusUpdateRequest,
+    authorization: Optional[str] = Header(None),
+    request: Request = None,
+):
+    actor = await get_current_user(authorization, request)
+    _require_admin(actor)
+
+    existing = await db.grievances.find_one({"grievance_id": grievance_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Grievance not found")
+
+    now = datetime.now(timezone.utc)
+    admin_note = (payload.admin_note or "").strip()[:2000]
+    await db.grievances.update_one(
+        {"grievance_id": grievance_id},
+        {
+            "$set": {
+                "status": payload.status,
+                "admin_note": admin_note,
+                "updated_at": now,
+                "last_updated_by": actor["user_id"],
+            }
+        },
+    )
+
+    await db.admin_audit_logs.insert_one(
+        {
+            "actor_user_id": actor["user_id"],
+            "target_grievance_id": grievance_id,
+            "action": "update_grievance_status",
+            "status": payload.status,
+            "created_at": now,
+        }
+    )
+
+    return {
+        "success": True,
+        "grievance_id": grievance_id,
+        "status": payload.status,
+        "admin_note": admin_note,
+        "updated_at": now.isoformat(),
+    }
 
 # ============== CHAT ENDPOINTS ==============
 
