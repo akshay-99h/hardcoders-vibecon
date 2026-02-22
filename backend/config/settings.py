@@ -6,7 +6,7 @@ load_dotenv()
 class Settings:
     EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY")
     MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017/mission_platform")
-    DB_NAME = os.getenv("DB_NAME", "mission_platform") 
+    DB_NAME = os.getenv("DB_NAME", "raksha-govt-portal-mission_platform") 
     JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
     ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
     
