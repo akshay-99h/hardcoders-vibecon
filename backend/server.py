@@ -847,6 +847,72 @@ async def get_automation_status(
         "automation_state": automation_state,
     }
 
+# ============== EXTENSION POLLING ENDPOINTS ==============
+
+@app.post("/api/automation/extension/register")
+async def register_extension(
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Register extension as connected (HTTP polling mode)."""
+    session_token = None
+    if authorization and authorization.startswith("Bearer "):
+        session_token = authorization.replace("Bearer ", "")
+    elif request and "session_token" in request.cookies:
+        session_token = request.cookies.get("session_token")
+
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user = await _get_user_by_session_token(session_token)
+    result = await _resolve_maybe_awaitable(
+        automation_service.register_extension(user["user_id"])
+    )
+    return result
+
+@app.get("/api/automation/extension/poll")
+async def poll_extension_commands(
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Poll for pending commands from the backend (extension calls this every 2s)."""
+    session_token = None
+    if authorization and authorization.startswith("Bearer "):
+        session_token = authorization.replace("Bearer ", "")
+    elif request and "session_token" in request.cookies:
+        session_token = request.cookies.get("session_token")
+
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user = await _get_user_by_session_token(session_token)
+    commands = await _resolve_maybe_awaitable(
+        automation_service.poll_commands(user["user_id"])
+    )
+    return {"commands": commands}
+
+@app.post("/api/automation/extension/message")
+async def extension_push_message(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+):
+    """Extension sends messages (step results, human done, etc.) via HTTP POST."""
+    session_token = None
+    if authorization and authorization.startswith("Bearer "):
+        session_token = authorization.replace("Bearer ", "")
+    elif request and "session_token" in request.cookies:
+        session_token = request.cookies.get("session_token")
+
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user = await _get_user_by_session_token(session_token)
+    body = await request.json()
+    result = await _resolve_maybe_awaitable(
+        automation_service.push_message(user["user_id"], body)
+    )
+    return result
+
 # ============== VOICE ENDPOINTS ==============
 
 @app.post("/api/voice/transcribe")

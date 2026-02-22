@@ -9,6 +9,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 class AutomationService:
     def __init__(self):
         self._sessions: Dict[str, Dict[str, Any]] = {}
+        self._outbound_queues: Dict[str, List[Dict[str, Any]]] = {}  # pending messages for polling
         self._lock = asyncio.Lock()
 
     def _now_iso(self) -> str:
@@ -93,6 +94,48 @@ class AutomationService:
             session["updated_at"] = self._now_iso()
             self._sessions[user_id] = session
 
+    # ─── HTTP Polling Methods ────────────────────────────────────────────────
+
+    async def register_extension(self, user_id: str):
+        """Register extension via HTTP (polling mode). Marks extension as connected."""
+        async with self._lock:
+            existing = self._sessions.get(user_id, {})
+            self._sessions[user_id] = {
+                **existing,
+                "user_id": user_id,
+                "extension_connected": True,
+                "automation_state": existing.get("automation_state") or {"status": "idle"},
+                "connected_at": self._now_iso(),
+                "updated_at": self._now_iso(),
+            }
+            if user_id not in self._outbound_queues:
+                self._outbound_queues[user_id] = []
+        return {"status": "registered", "user_id": user_id}
+
+    async def poll_commands(self, user_id: str):
+        """Return and clear any pending outbound commands for the extension."""
+        async with self._lock:
+            # Refresh connected timestamp
+            session = self._sessions.get(user_id)
+            if session:
+                session["extension_connected"] = True
+                session["updated_at"] = self._now_iso()
+            commands = self._outbound_queues.get(user_id, [])
+            self._outbound_queues[user_id] = []
+        return commands
+
+    async def push_message(self, user_id: str, payload: Dict[str, Any]):
+        """Receive a message from the extension via HTTP POST."""
+        await self._handle_extension_message(user_id, payload)
+        return {"ok": True}
+
+    async def _queue_command(self, user_id: str, command: Dict[str, Any]):
+        """Queue a command for the extension to pick up via polling."""
+        async with self._lock:
+            if user_id not in self._outbound_queues:
+                self._outbound_queues[user_id] = []
+            self._outbound_queues[user_id].append(command)
+
     async def start_automation(
         self,
         user_id: str,
@@ -104,10 +147,9 @@ class AutomationService:
     ):
         async with self._lock:
             session = self._sessions.get(user_id)
-            websocket = session.get("websocket") if session else None
-
-        if websocket is None:
-            raise ValueError("Automation extension is not connected")
+            if not session or not session.get("extension_connected"):
+                raise ValueError("Automation extension is not connected")
+            websocket = session.get("websocket")
 
         command_payload = {
             "type": "start_automation",
@@ -118,20 +160,20 @@ class AutomationService:
             "mission_steps": mission_steps,
         }
 
-        try:
-            await websocket.send_json(command_payload)
-        except Exception as exc:
-            async with self._lock:
-                failed_session = self._sessions.get(user_id, {})
-                failed_session["websocket"] = None
-                failed_session["extension_connected"] = False
-                failed_session["automation_state"] = {
-                    "status": "error",
-                    "error": "Failed to deliver automation request to extension",
-                }
-                failed_session["updated_at"] = self._now_iso()
-                self._sessions[user_id] = failed_session
-            raise RuntimeError("Could not send automation request to extension") from exc
+        # Try WebSocket first, fall back to polling queue
+        sent_via_ws = False
+        if websocket is not None:
+            try:
+                await websocket.send_json(command_payload)
+                sent_via_ws = True
+            except Exception:
+                async with self._lock:
+                    session = self._sessions.get(user_id, {})
+                    session["websocket"] = None
+                    self._sessions[user_id] = session
+
+        if not sent_via_ws:
+            await self._queue_command(user_id, command_payload)
 
         async with self._lock:
             active_session = self._sessions.setdefault(
