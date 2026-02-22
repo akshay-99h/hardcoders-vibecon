@@ -1029,11 +1029,12 @@ function ChatInterface() {
         includeContext: true
       });
 
-      // Add assistant response
+      // Add assistant response (include machine_plan if available)
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: response.data.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        ...(response.data.machine_plan ? { machine_plan: response.data.machine_plan } : {})
       }]);
 
       // Update current conversation ID if new
@@ -1550,24 +1551,42 @@ function ChatInterface() {
         return;
       }
 
-      const missionSteps = extractMissionSteps(message.content || '');
-      if (missionSteps.length === 0) {
-        setAutomationStateForMessage(messageId, 'error', 'No numbered steps found in this response');
-        return;
-      }
-
-      const portalUrl = extractGovInUrl(message.content || '');
       const missionId = `mission_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const missionTitle = (missionSteps[0] || 'Automation Task').slice(0, 120);
       const missionDescription = (message.content || '').trim().slice(0, 3000);
 
-      await api.post('/api/automation/start', {
-        mission_id: missionId,
-        mission_title: missionTitle,
-        mission_description: missionDescription,
-        portal_url: portalUrl,
-        mission_steps: missionSteps
-      });
+      // Use machine_plan if available (structured JSON from backend LLM)
+      if (message.machine_plan && message.machine_plan.steps && message.machine_plan.steps.length > 0) {
+        const plan = message.machine_plan;
+        const portalUrl = plan.start_url || extractGovInUrl(message.content || '');
+        const missionTitle = (plan.goal || 'Automation Task').slice(0, 120);
+
+        await api.post('/api/automation/start', {
+          mission_id: missionId,
+          mission_title: missionTitle,
+          mission_description: missionDescription,
+          portal_url: portalUrl,
+          mission_steps: plan.steps,
+          machine_plan: plan
+        });
+      } else {
+        // Fallback: parse human text into steps (legacy mode)
+        const missionSteps = extractMissionSteps(message.content || '');
+        if (missionSteps.length === 0) {
+          setAutomationStateForMessage(messageId, 'error', 'No numbered steps found in this response');
+          return;
+        }
+
+        const portalUrl = extractGovInUrl(message.content || '');
+        const missionTitle = (missionSteps[0] || 'Automation Task').slice(0, 120);
+
+        await api.post('/api/automation/start', {
+          mission_id: missionId,
+          mission_title: missionTitle,
+          mission_description: missionDescription,
+          portal_url: portalUrl,
+          mission_steps: missionSteps
+        });
+      }
 
       setAutomationStateForMessage(messageId, 'running');
       setActiveAutomationMessageId(messageId);
