@@ -189,7 +189,9 @@ async function handleBackendMessage(msg) {
 
     case 'AUTOMATION_START': {
       currentMission = msg.mission;
-      automationState = 'awaiting_permission';
+      missionSteps = msg.steps || [];
+      currentStepIndex = 0;
+      setAutomationState('awaiting_permission');
       const permMsg = {
         type: 'REQUEST_PERMISSION',
         mission: msg.mission,
