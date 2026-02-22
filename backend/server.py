@@ -85,6 +85,7 @@ class ChatResponse(BaseModel):
     contextUsed: bool
     model: str
     tokensUsed: Optional[int] = None
+    machine_plan: Optional[Dict[str, Any]] = None
 
 
 class CheckoutRequest(BaseModel):
@@ -114,7 +115,8 @@ class AutomationStartRequest(BaseModel):
     mission_title: str
     mission_description: str
     portal_url: Optional[str] = None
-    mission_steps: List[str]
+    mission_steps: List[Any] = []
+    machine_plan: Optional[Dict[str, Any]] = None
 
 
 def _is_admin(user: Dict[str, Any]) -> bool:
@@ -659,7 +661,8 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
     # Get knowledge base context for the user's query
     knowledge_context = context_service.get_context_for_query(chat_message.message)
     
-    # Get AI response
+    # Get AI response (human-readable)
+    machine_plan = None
     try:
         result = await chat_agent.process({
             "user_input": chat_message.message,
@@ -682,6 +685,17 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
         print(f"Chat error: {e}")
         assistant_message = "I apologize, but I'm having trouble processing your request. Could you please rephrase?"
     
+    # Generate machine plan for automation (separate LLM call, non-blocking for chat)
+    try:
+        machine_plan = await chat_agent.generate_machine_plan(
+            user_input=chat_message.message,
+            human_response=assistant_message,
+            web_context=result.get("web_context", "") if isinstance(result, dict) else ""
+        )
+    except Exception as e:
+        print(f"Machine plan generation error (non-fatal): {e}")
+        machine_plan = None
+    
     # Save assistant message
     assistant_message_doc = {
         "message_id": f"msg_{uuid.uuid4().hex[:12]}",
@@ -690,6 +704,8 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
         "content": assistant_message,
         "timestamp": datetime.now(timezone.utc)
     }
+    if machine_plan:
+        assistant_message_doc["machine_plan"] = machine_plan
     await db.messages.insert_one(assistant_message_doc)
     
     # Update conversation
@@ -703,7 +719,8 @@ async def chat(chat_message: ChatMessage, authorization: Optional[str] = Header(
         conversationId=conversation_id,
         contextUsed=chat_message.includeContext,
         model=settings.PRIMARY_MODEL,
-        tokensUsed=None
+        tokensUsed=None,
+        machine_plan=machine_plan
     )
 
 @app.get("/api/conversations")
@@ -806,6 +823,7 @@ async def start_automation(
                 mission_description=payload.mission_description,
                 portal_url=payload.portal_url,
                 mission_steps=payload.mission_steps,
+                machine_plan=payload.machine_plan,
             )
         )
     except ValueError as exc:
