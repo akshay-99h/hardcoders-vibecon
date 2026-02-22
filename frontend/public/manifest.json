@@ -1,0 +1,16 @@
+{
+  "short_name": "RakshaAI",
+  "name": "RakshaAI - Legal and Financial Clarity",
+  "description": "AI-powered legal, government, and financial guidance platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f49bd",
+  "icons": [
+    {
+      "src": "/images/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

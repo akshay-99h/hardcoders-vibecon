@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">RakshaAI - Legal and Financial Clarity</title>
+  <desc id="desc">Social preview image for RakshaAI website.</desc>
+  <defs>
+    <linearGradient id="bgGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#eef4ff"/>
+      <stop offset="100%" stop-color="#e5fff3"/>
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f49bd" stop-opacity="0.24"/>
+      <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.1"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bgGradient)"/>
+
+  <circle cx="1040" cy="110" r="170" fill="url(#accentGradient)"/>
+  <circle cx="150" cy="590" r="210" fill="url(#accentGradient)"/>
+  <path d="M920 500 C 990 390, 1110 360, 1180 280" fill="none" stroke="#0f49bd" stroke-opacity="0.25" stroke-width="8" stroke-linecap="round"/>
+  <path d="M70 160 C 170 120, 230 190, 330 150" fill="none" stroke="#0f49bd" stroke-opacity="0.2" stroke-width="7" stroke-linecap="round"/>
+
+  <g transform="translate(80,72)">
+    <rect x="0" y="0" width="58" height="58" rx="16" fill="#0f49bd"/>
+    <circle cx="29" cy="29" r="18" fill="#ffffff" opacity="0.95"/>
+    <path d="M21 30 l6 6 l12 -14" fill="none" stroke="#0f49bd" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <text x="160" y="112" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="52" font-weight="800" fill="#0f49bd">
+    RakshaAI
+  </text>
+
+  <text x="80" y="254" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="78" font-weight="800" fill="#0b1220">
+    Legal &amp; Financial
+  </text>
+  <text x="80" y="334" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="78" font-weight="800" fill="#0f49bd">
+    Clarity, Ready to Act
+  </text>
+
+  <text x="80" y="408" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="34" font-weight="500" fill="#334155">
+    AI guidance for legal notices, government services, and financial workflows
+  </text>
+
+  <g transform="translate(80,460)">
+    <rect x="0" y="0" width="215" height="48" rx="24" fill="#0f49bd" fill-opacity="0.12" stroke="#0f49bd" stroke-opacity="0.22"/>
+    <text x="27" y="31" font-family="'IBM Plex Mono', monospace" font-size="20" fill="#0f49bd">Chat + Voice</text>
+    <rect x="232" y="0" width="250" height="48" rx="24" fill="#0f49bd" fill-opacity="0.12" stroke="#0f49bd" stroke-opacity="0.22"/>
+    <text x="258" y="31" font-family="'IBM Plex Mono', monospace" font-size="20" fill="#0f49bd">Document Analysis</text>
+    <rect x="499" y="0" width="195" height="48" rx="24" fill="#0f49bd" fill-opacity="0.12" stroke="#0f49bd" stroke-opacity="0.22"/>
+    <text x="524" y="31" font-family="'IBM Plex Mono', monospace" font-size="20" fill="#0f49bd">Draft + Export</text>
+  </g>
+</svg>
