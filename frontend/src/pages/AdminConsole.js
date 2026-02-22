@@ -169,7 +169,7 @@ function ChartCard({ title, subtitle, children }) {
 function AdminConsole() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isCompactLayout } = useClientEnvironment();
+  const { isMobileViewport, isStandalonePWA, isLikelyMobileDevice } = useClientEnvironment();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1139,7 +1139,8 @@ function AdminConsole() {
     );
   }
 
-  const bottomNavPaddingClass = isCompactLayout ? 'pb-36' : 'pb-28';
+  const isMobileAdminShell = isLikelyMobileDevice && (isMobileViewport || isStandalonePWA);
+  const bottomNavPaddingClass = isMobileAdminShell ? 'pb-36' : 'pb-16';
 
   return (
     <div className="min-h-screen bg-background">
@@ -1204,36 +1205,38 @@ function AdminConsole() {
         {renderPageContent()}
       </main>
 
-      <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.45rem)' }}
-      >
-        <div
-          className="mx-auto grid w-full max-w-[1600px] gap-1 px-3 pt-2"
-          style={{ gridTemplateColumns: `repeat(${NAV_GROUPS.length}, minmax(0, 1fr))` }}
+      {isMobileAdminShell && (
+        <nav
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.45rem)' }}
         >
-          {NAV_GROUPS.map((group) => {
-            const Icon = group.icon;
-            const isActive = group.id === activeGroup.id;
-            const target = group.items.find((item) => item.path === activePath)?.path || group.items[0].path;
+          <div
+            className="mx-auto grid w-full max-w-[1600px] gap-1 px-3 pt-2"
+            style={{ gridTemplateColumns: `repeat(${NAV_GROUPS.length}, minmax(0, 1fr))` }}
+          >
+            {NAV_GROUPS.map((group) => {
+              const Icon = group.icon;
+              const isActive = group.id === activeGroup.id;
+              const target = group.items.find((item) => item.path === activePath)?.path || group.items[0].path;
 
-            return (
-              <button
-                key={group.id}
-                onClick={() => navigate(target)}
-                className={`rounded-xl px-3 py-2 text-left transition-colors ${
-                  isActive ? 'bg-primary/12 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-2 text-sm font-medium">
-                  <Icon size={15} />
-                  <span>{group.label}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+              return (
+                <button
+                  key={group.id}
+                  onClick={() => navigate(target)}
+                  className={`rounded-xl px-3 py-2 text-left transition-colors ${
+                    isActive ? 'bg-primary/12 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-2 text-sm font-medium">
+                    <Icon size={15} />
+                    <span>{group.label}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

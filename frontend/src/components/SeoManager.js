@@ -35,6 +35,26 @@ const ROUTE_SEO = {
     title: 'Billing | RakshaAI',
     description: 'Manage RakshaAI subscription plans and usage.',
   },
+  '/billing/overview': {
+    title: 'Billing Overview | RakshaAI',
+    description: 'Workspace billing overview, quota usage, and seat health.',
+  },
+  '/billing/pricing': {
+    title: 'Pricing Plans | RakshaAI',
+    description: 'Compare RakshaAI plans, usage limits, and upgrade options.',
+  },
+  '/billing/billing': {
+    title: 'Subscription Billing | RakshaAI',
+    description: 'Manage subscription status, checkout sync, and Stripe customer portal.',
+  },
+  '/billing/invoices': {
+    title: 'Invoices | RakshaAI',
+    description: 'Review billing cycles and available invoice records.',
+  },
+  '/billing/settings': {
+    title: 'Billing Settings | RakshaAI',
+    description: 'Configure billing defaults and support escalation links.',
+  },
   '/billing/checkout/success': {
     title: 'Checkout Success | RakshaAI',
     description: 'Stripe checkout completed. RakshaAI is syncing your subscription status.',
@@ -89,9 +109,10 @@ function SeoManager() {
 
   useEffect(() => {
     const pathname = location.pathname || '/';
-    const config = ROUTE_SEO[pathname] || ROUTE_SEO['/'];
-    const pageUrl = `${window.location.origin}${pathname}`;
-    const isPublic = PUBLIC_ROUTES.has(pathname);
+    const normalizedPath = pathname.replace(/\/+$/, '') || '/';
+    const config = ROUTE_SEO[normalizedPath] || ROUTE_SEO['/'];
+    const pageUrl = `${window.location.origin}${normalizedPath}`;
+    const isPublic = PUBLIC_ROUTES.has(normalizedPath);
 
     document.title = config.title;
 

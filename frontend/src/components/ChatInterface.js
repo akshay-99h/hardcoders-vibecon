@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { FiChevronDown } from 'react-icons/fi';
 import { 
   Add01Icon, Delete02Icon, Menu01Icon, Sun03Icon, Moon02Icon,
   AttachmentIcon, Mic01Icon, ArrowRight01Icon,
@@ -10,6 +11,26 @@ import {
 import api from '../utils/api';
 import { ACTION_HUB_COPY, ACTION_HUB_SCHEMA } from '../config/actionHubConfig';
 import { Switch } from './ui/switch';
+import { Button } from './ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from './ui/sidebar';
 import { useClientEnvironment } from '../utils/clientEnvironment';
 
 function ChatInterface() {
@@ -32,7 +53,6 @@ function ChatInterface() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
-  const [downloadMenuOpenFor, setDownloadMenuOpenFor] = useState(null);
   const [isRoleUpdating, setIsRoleUpdating] = useState(false);
   const [activeAction, setActiveAction] = useState(null);
   const [actionFormValues, setActionFormValues] = useState({});
@@ -147,17 +167,6 @@ function ChatInterface() {
     const timeoutId = window.setTimeout(() => setActionToast(null), 2800);
     return () => window.clearTimeout(timeoutId);
   }, [actionToast]);
-
-  useEffect(() => {
-    const handleGlobalClick = (event) => {
-      if (!(event.target instanceof HTMLElement)) return;
-      if (event.target.closest('[data-download-menu="true"]')) return;
-      setDownloadMenuOpenFor(null);
-    };
-
-    document.addEventListener('click', handleGlobalClick);
-    return () => document.removeEventListener('click', handleGlobalClick);
-  }, []);
 
   const handleAuthCallback = async () => {
     setIsAuthenticating(true);
@@ -1665,13 +1674,11 @@ function ChatInterface() {
   
   const handleDownloadDocument = async (message, format = 'pdf') => {
     if (isMetricLocked('pdf_exports')) {
-      navigate('/billing');
+      navigate('/billing/pricing');
       return;
     }
 
     try {
-      setDownloadMenuOpenFor(null);
-
       // Extract only the document portion (remove AI explanations)
       const cleanDocument = extractDocumentOnly(message.content);
       
@@ -1877,101 +1884,105 @@ function ChatInterface() {
             : `${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden`
         }`}
       >
-        {/* Sidebar Header */}
-        <div className="p-4 border-b border-border flex-shrink-0">
-          <button
-            onClick={handleNewChat}
-            className="w-full bg-primary text-primary-foreground px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-          >
-            <Add01Icon size={20} />
-            <span>New Chat</span>
-          </button>
-        </div>
-
-        {/* Conversations List - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-2 min-h-0">
-          {conversations.map((conv) => (
-            <button
-              key={conv.conversation_id}
-              onClick={() => loadConversation(conv.conversation_id)}
-              className={`w-full text-left p-3 rounded-lg mb-2 hover:bg-accent transition-colors group ${
-                currentConversation === conv.conversation_id ? 'bg-accent' : ''
-              }`}
+        <Sidebar className="h-full rounded-none border-0 border-r bg-card">
+          <SidebarHeader className="p-4">
+            <Button
+              onClick={handleNewChat}
+              className="w-full justify-center gap-2"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground truncate">{conv.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(conv.updated_at).toLocaleDateString()}
-                  </p>
+              <Add01Icon size={18} />
+              <span>New Chat</span>
+            </Button>
+          </SidebarHeader>
+
+          <SidebarContent className="p-2">
+            <SidebarGroup className="mb-0">
+              <SidebarGroupLabel>Recent Conversations</SidebarGroupLabel>
+              <SidebarMenu>
+                {conversations.map((conv) => (
+                  <SidebarMenuItem key={conv.conversation_id}>
+                    <div
+                      className={`group flex items-start gap-1 rounded-lg transition-colors ${
+                        currentConversation === conv.conversation_id ? 'bg-accent' : 'hover:bg-accent/70'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => loadConversation(conv.conversation_id)}
+                        className="min-w-0 flex-1 px-3 py-2 text-left"
+                      >
+                        <p className="truncate text-sm text-foreground">{conv.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(conv.updated_at).toLocaleDateString()}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteConversation(conv.conversation_id, e)}
+                        className="mr-1 mt-1 rounded p-1 text-destructive opacity-0 transition-all hover:bg-destructive/10 group-hover:opacity-100"
+                        title="Delete conversation"
+                      >
+                        <Delete02Icon size={15} />
+                      </button>
+                    </div>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroup>
+          </SidebarContent>
+
+          <SidebarFooter className="p-4">
+            <div className="flex items-center gap-3">
+              {user?.picture ? (
+                <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full" />
+              ) : (
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-bold">
+                  {user?.name?.charAt(0)}
                 </div>
-                <button
-                  onClick={(e) => handleDeleteConversation(conv.conversation_id, e)}
-                  className="opacity-0 group-hover:opacity-100 text-destructive p-1 hover:bg-destructive/10 rounded transition-all"
-                >
-                  <Delete02Icon size={16} />
-                </button>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{user?.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
               </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Sidebar Footer */}
-        <div className="p-4 border-t border-border flex-shrink-0">
-          <div className="flex items-center gap-3">
-            {user?.picture ? (
-              <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full" />
-            ) : (
-              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-bold">
-                {user?.name?.charAt(0)}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
             </div>
-          </div>
 
-          <div className="mt-3 space-y-1">
-            <button
-              onClick={() => navigate('/contact')}
-              className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
-            >
-              <span>Contact Us</span>
-              <ArrowRight01Icon size={14} />
-            </button>
-            <button
-              onClick={() => navigate('/billing')}
-              className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
-            >
-              <span>Billing & Usage</span>
-              <ArrowRight01Icon size={14} />
-            </button>
-            {(user?.role === 'admin' || user?.role === 'superadmin') && (
-              <button
-                onClick={() => navigate('/admin')}
-                className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
-              >
-                <span>Admin Console</span>
-                <ArrowRight01Icon size={14} />
-              </button>
-            )}
-            <button
-              onClick={toggleTheme}
-              className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
-            >
-              <span>{isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme'}</span>
-              {isDark ? <Sun03Icon size={14} /> : <Moon02Icon size={14} />}
-            </button>
-          </div>
+            <div className="mt-3 space-y-1">
+              <SidebarMenuButton onClick={() => navigate('/billing/overview')}>
+                <span>Open Billing Dashboard</span>
+                <ArrowRight01Icon size={14} className="ml-auto" />
+              </SidebarMenuButton>
+              <SidebarMenuButton onClick={() => navigate('/contact')}>
+                <span>Contact Support</span>
+                <ArrowRight01Icon size={14} className="ml-auto" />
+              </SidebarMenuButton>
+            </div>
 
-          <button
-            onClick={handleLogout}
-            className="w-full mt-3 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center gap-2"
-          >
-            <Logout01Icon size={16} />
-            <span>Logout</span>
-          </button>
-        </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="mt-3 w-full justify-between">
+                  Account Menu
+                  <FiChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Workspace</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => navigate('/billing/overview')}>Billing & Usage</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => navigate('/contact')}>Contact Us</DropdownMenuItem>
+                {(user?.role === 'admin' || user?.role === 'superadmin') && (
+                  <DropdownMenuItem onSelect={() => navigate('/admin')}>Admin Console</DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={toggleTheme}>
+                  {isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={handleLogout} className="text-destructive hover:text-destructive">
+                  <Logout01Icon size={14} />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarFooter>
+        </Sidebar>
       </div>
 
       {/* Main Chat Area */}
@@ -2149,7 +2160,6 @@ function ChatInterface() {
 
             {messages.map((message, index) => {
               const menuId = getDownloadMenuId(message, index);
-              const isDownloadMenuOpen = downloadMenuOpenFor === menuId;
               const automationStatus = getAutomationStateForMessage(menuId);
               const automationError = automationButtonStates[menuId]?.error || '';
               const assistantMedia = message.role === 'assistant'
@@ -2254,40 +2264,25 @@ function ChatInterface() {
                       
                       {/* Download button with format dropdown - only for generated documents */}
                       {isGeneratedDocument(message) && (
-                        <div className="relative" data-download-menu="true">
-                          <button
-                            onClick={() => {
-                              setDownloadMenuOpenFor(isDownloadMenuOpen ? null : menuId);
-                            }}
-                            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
-                            title="Download document"
-                            data-download-menu="true"
-                          >
-                            <Download01Icon size={16} />
-                          </button>
-
-                          {isDownloadMenuOpen && (
-                            <div
-                              className="absolute left-0 top-full mt-1 w-36 rounded-lg border border-border bg-card shadow-md z-20 p-1"
-                              data-download-menu="true"
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                              title="Download document"
                             >
-                              <button
-                                onClick={() => handleDownloadDocument(message, 'pdf')}
-                                className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-accent rounded"
-                                data-download-menu="true"
-                              >
-                                Download .pdf
-                              </button>
-                              <button
-                                onClick={() => handleDownloadDocument(message, 'docx')}
-                                className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-accent rounded"
-                                data-download-menu="true"
-                              >
-                                Download .docx
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                              <Download01Icon size={16} />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-40">
+                            <DropdownMenuItem onSelect={() => handleDownloadDocument(message, 'pdf')}>
+                              Download .pdf
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleDownloadDocument(message, 'docx')}>
+                              Download .docx
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                     </div>
                   )}
