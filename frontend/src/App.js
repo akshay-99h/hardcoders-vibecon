@@ -7,6 +7,7 @@ import LandingPage from './components/LandingPage';
 import ChatInterface from './components/ChatInterface';
 import HowItWorks from './components/HowItWorks';
 import ProjectSlides from './components/ProjectSlides';
+import SeoManager from './components/SeoManager';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import AICall from './pages/AICall';
@@ -15,18 +16,21 @@ import AdminConsole from './pages/AdminConsole';
 
 function AppRouter() {
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/how-it-works" element={<HowItWorks />} />
-      <Route path="/slides" element={<ProjectSlides />} />
-      <Route path="/privacy" element={<PrivacyPolicy />} />
-      <Route path="/terms" element={<TermsOfService />} />
-      <Route path="/chat" element={<ChatInterface />} />
-      <Route path="/call" element={<AICall />} />
-      <Route path="/billing" element={<BillingPage />} />
-      <Route path="/admin/*" element={<AdminConsole />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <SeoManager />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/how-it-works" element={<HowItWorks />} />
+        <Route path="/slides" element={<ProjectSlides />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/chat" element={<ChatInterface />} />
+        <Route path="/call" element={<AICall />} />
+        <Route path="/billing" element={<BillingPage />} />
+        <Route path="/admin/*" element={<AdminConsole />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }
 
