@@ -6,6 +6,18 @@ function getIsMobileViewport() {
   return window.innerWidth < MOBILE_BREAKPOINT;
 }
 
+function getIsLikelyMobileDevice() {
+  const userAgentDataMobile = window.navigator.userAgentData?.mobile;
+  if (typeof userAgentDataMobile === 'boolean') {
+    return userAgentDataMobile;
+  }
+
+  const userAgent = window.navigator.userAgent || '';
+  const mobileByUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+  const ipadDesktopMode = window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1;
+  return mobileByUserAgent || ipadDesktopMode;
+}
+
 function getIsStandalonePWA() {
   const hasNavigatorStandalone = typeof window.navigator.standalone === 'boolean' && window.navigator.standalone;
   const displayModeStandalone = window.matchMedia('(display-mode: standalone)').matches;
@@ -16,53 +28,65 @@ function getIsStandalonePWA() {
 export function useClientEnvironment() {
   const [isMobileViewport, setIsMobileViewport] = useState(getIsMobileViewport);
   const [isStandalonePWA, setIsStandalonePWA] = useState(getIsStandalonePWA);
+  const [isLikelyMobileDevice, setIsLikelyMobileDevice] = useState(getIsLikelyMobileDevice);
 
   useEffect(() => {
     const displayModeQuery = window.matchMedia('(display-mode: standalone)');
     const fullscreenQuery = window.matchMedia('(display-mode: fullscreen)');
 
-    const updateViewport = () => {
+    const updateEnvironment = () => {
       setIsMobileViewport(getIsMobileViewport());
-    };
-
-    const updateDisplayMode = () => {
       setIsStandalonePWA(getIsStandalonePWA());
+      setIsLikelyMobileDevice(getIsLikelyMobileDevice());
     };
 
-    window.addEventListener('resize', updateViewport);
-    window.addEventListener('orientationchange', updateViewport);
-    document.addEventListener('visibilitychange', updateDisplayMode);
+    window.addEventListener('resize', updateEnvironment);
+    window.addEventListener('orientationchange', updateEnvironment);
+    document.addEventListener('visibilitychange', updateEnvironment);
 
     if (displayModeQuery.addEventListener) {
-      displayModeQuery.addEventListener('change', updateDisplayMode);
-      fullscreenQuery.addEventListener('change', updateDisplayMode);
+      displayModeQuery.addEventListener('change', updateEnvironment);
+      fullscreenQuery.addEventListener('change', updateEnvironment);
     } else {
-      displayModeQuery.addListener(updateDisplayMode);
-      fullscreenQuery.addListener(updateDisplayMode);
+      displayModeQuery.addListener(updateEnvironment);
+      fullscreenQuery.addListener(updateEnvironment);
     }
 
     return () => {
-      window.removeEventListener('resize', updateViewport);
-      window.removeEventListener('orientationchange', updateViewport);
-      document.removeEventListener('visibilitychange', updateDisplayMode);
+      window.removeEventListener('resize', updateEnvironment);
+      window.removeEventListener('orientationchange', updateEnvironment);
+      document.removeEventListener('visibilitychange', updateEnvironment);
       if (displayModeQuery.removeEventListener) {
-        displayModeQuery.removeEventListener('change', updateDisplayMode);
-        fullscreenQuery.removeEventListener('change', updateDisplayMode);
+        displayModeQuery.removeEventListener('change', updateEnvironment);
+        fullscreenQuery.removeEventListener('change', updateEnvironment);
       } else {
-        displayModeQuery.removeListener(updateDisplayMode);
-        fullscreenQuery.removeListener(updateDisplayMode);
+        displayModeQuery.removeListener(updateEnvironment);
+        fullscreenQuery.removeListener(updateEnvironment);
       }
     };
   }, []);
 
+  const isMobileStandalonePWA = useMemo(
+    () => isStandalonePWA && isLikelyMobileDevice,
+    [isStandalonePWA, isLikelyMobileDevice]
+  );
+
+  const isCompactLayout = useMemo(
+    () => isMobileViewport || isMobileStandalonePWA,
+    [isMobileViewport, isMobileStandalonePWA]
+  );
+
   const isDesktopBrowser = useMemo(
-    () => !isMobileViewport && !isStandalonePWA,
-    [isMobileViewport, isStandalonePWA]
+    () => !isCompactLayout,
+    [isCompactLayout]
   );
 
   return {
     isMobileViewport,
     isStandalonePWA,
+    isLikelyMobileDevice,
+    isMobileStandalonePWA,
+    isCompactLayout,
     isDesktopBrowser,
   };
 }

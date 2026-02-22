@@ -14,8 +14,7 @@ import { useClientEnvironment } from '../utils/clientEnvironment';
 
 function ChatInterface() {
   const navigate = useNavigate();
-  const { isMobileViewport, isStandalonePWA, isDesktopBrowser } = useClientEnvironment();
-  const isCompactLayout = isMobileViewport || isStandalonePWA;
+  const { isCompactLayout, isDesktopBrowser } = useClientEnvironment();
 
   const [user, setUser] = useState(null);
   const [billingStatus, setBillingStatus] = useState(null);
