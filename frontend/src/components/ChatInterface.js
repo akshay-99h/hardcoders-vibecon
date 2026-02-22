@@ -2532,7 +2532,7 @@ function ChatInterface() {
                         </button>
 
                         <button
-                          onClick={handleSendMessage}
+                          onClick={() => handleSendMessage()}
                           disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
                           className="h-10 w-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                           title={selectedFile ? 'Analyze document' : 'Send message'}
@@ -2608,7 +2608,7 @@ function ChatInterface() {
                     </div>
 
                     <button
-                      onClick={handleSendMessage}
+                      onClick={() => handleSendMessage()}
                       disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
                       className="p-2.5 sm:p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
                       title={selectedFile ? 'Analyze document' : 'Send message'}
