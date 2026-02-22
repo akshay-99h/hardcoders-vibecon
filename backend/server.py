@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any
 import os
 import uuid
 import base64
+import inspect
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
@@ -22,6 +23,7 @@ from services.vision_service import VisionService
 from services.ai_call_service import ai_call_service
 from services.pdf_generator import PDFGeneratorService
 from services.billing_service import BillingService
+from services.automation_service import automation_service
 
 # Helper function to serialize datetime objects
 def serialize_doc(doc):
@@ -107,6 +109,14 @@ class SeatUpdateRequest(BaseModel):
     seat_used: Optional[int] = None
 
 
+class AutomationStartRequest(BaseModel):
+    mission_id: str
+    mission_title: str
+    mission_description: str
+    portal_url: Optional[str] = None
+    mission_steps: List[str]
+
+
 def _is_admin(user: Dict[str, Any]) -> bool:
     return user.get("role") in {"admin", "superadmin"}
 
@@ -131,6 +141,48 @@ async def _enforce_feature_limit(user_id: str, metric: str, units: int = 1):
             },
         )
 
+
+async def _resolve_maybe_awaitable(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def _get_user_by_session_token(session_token: str):
+    session_doc = await db.user_sessions.find_one(
+        {"session_token": session_token},
+        {"_id": 0}
+    )
+
+    if not session_doc:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    expires_at = session_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Session expired")
+
+    user_doc = await db.users.find_one(
+        {"user_id": session_doc["user_id"]},
+        {"_id": 0}
+    )
+
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user_doc.get("role"):
+        user_doc["role"] = "user"
+        await db.users.update_one(
+            {"user_id": user_doc["user_id"]},
+            {"$set": {"role": "user", "updated_at": datetime.now(timezone.utc)}}
+        )
+
+    return serialize_doc(user_doc)
+
 # ============== AUTH ENDPOINTS ==============
 
 @app.get("/api/auth/me")
@@ -145,40 +197,8 @@ async def get_current_user(authorization: Optional[str] = Header(None), request:
     
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    session_doc = await db.user_sessions.find_one(
-        {"session_token": session_token},
-        {"_id": 0}
-    )
-    
-    if not session_doc:
-        raise HTTPException(status_code=401, detail="Invalid session")
-    
-    expires_at = session_doc["expires_at"]
-    if isinstance(expires_at, str):
-        expires_at = datetime.fromisoformat(expires_at)
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    
-    if expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=401, detail="Session expired")
-    
-    user_doc = await db.users.find_one(
-        {"user_id": session_doc["user_id"]},
-        {"_id": 0}
-    )
-    
-    if not user_doc:
-        raise HTTPException(status_code=404, detail="User not found")
 
-    if not user_doc.get("role"):
-        user_doc["role"] = "user"
-        await db.users.update_one(
-            {"user_id": user_doc["user_id"]},
-            {"$set": {"role": "user", "updated_at": datetime.now(timezone.utc)}}
-        )
-    
-    return serialize_doc(user_doc)
+    return await _get_user_by_session_token(session_token)
 
 @app.post("/api/auth/session")
 async def create_session(request: Request):
@@ -744,6 +764,88 @@ async def delete_conversation(
     await db.messages.delete_many({"conversation_id": conversation_id})
     
     return {"success": True}
+
+# ============== AUTOMATION ENDPOINTS ==============
+
+@app.websocket("/ws/automation")
+async def automation_websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None)):
+    """WebSocket endpoint used by browser extension for automation sessions."""
+    if not token:
+        await websocket.close(code=1008, reason="Not authenticated")
+        return
+
+    try:
+        user = await _get_user_by_session_token(token)
+    except HTTPException:
+        await websocket.close(code=1008, reason="Invalid session")
+        return
+
+    try:
+        await _resolve_maybe_awaitable(
+            automation_service.handle_connection(websocket, user["user_id"])
+        )
+    except WebSocketDisconnect:
+        return
+
+
+@app.post("/api/automation/start")
+async def start_automation(
+    payload: AutomationStartRequest,
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Start mission automation through connected extension."""
+    user = await get_current_user(authorization, request)
+
+    try:
+        result = await _resolve_maybe_awaitable(
+            automation_service.start_automation(
+                user_id=user["user_id"],
+                mission_id=payload.mission_id,
+                mission_title=payload.mission_title,
+                mission_description=payload.mission_description,
+                portal_url=payload.portal_url,
+                mission_steps=payload.mission_steps,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    if isinstance(result, dict):
+        return {"success": True, **result}
+    return {"success": True, "result": result}
+
+
+@app.get("/api/automation/status")
+async def get_automation_status(
+    authorization: Optional[str] = Header(None),
+    request: Request = None
+):
+    """Get extension connectivity and current automation state for current user."""
+    user = await get_current_user(authorization, request)
+    session = await _resolve_maybe_awaitable(
+        automation_service.get_session_by_user(user["user_id"])
+    )
+
+    if not session:
+        return {
+            "extension_connected": False,
+            "automation_state": None,
+        }
+
+    extension_connected = bool(
+        session.get("extension_connected")
+        or session.get("is_connected")
+        or session.get("connected")
+    )
+    automation_state = session.get("automation_state") or session.get("state")
+
+    return {
+        "extension_connected": extension_connected,
+        "automation_state": automation_state,
+    }
 
 # ============== VOICE ENDPOINTS ==============
 

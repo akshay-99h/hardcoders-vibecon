@@ -43,6 +43,8 @@ function ChatInterface() {
   const [voiceState, setVoiceState] = useState('idle'); // idle, listening, thinking, speaking
   const [voiceVolume, setVoiceVolume] = useState(0); // Track mic volume for visual feedback
   const [isUserSpeaking, setIsUserSpeaking] = useState(false); // Track if user is actively speaking
+  const [automationButtonStates, setAutomationButtonStates] = useState({});
+  const [activeAutomationMessageId, setActiveAutomationMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -175,6 +177,8 @@ function ChatInterface() {
       const response = await api.get(`/api/conversations/${conversationId}`);
       setMessages(response.data.messages);
       setCurrentConversation(conversationId);
+      setAutomationButtonStates({});
+      setActiveAutomationMessageId(null);
       if (isMobile) setSidebarOpen(false);
     } catch (error) {
       console.error('Failed to load conversation:', error);
@@ -959,6 +963,8 @@ function ChatInterface() {
   const handleNewChat = () => {
     setCurrentConversation(null);
     setMessages([]);
+    setAutomationButtonStates({});
+    setActiveAutomationMessageId(null);
     if (isMobile) setSidebarOpen(false);
   };
 
@@ -1200,6 +1206,189 @@ function ChatInterface() {
       console.error('Failed to copy:', error);
     }
   };
+
+  const getMessageActionId = (message, index) => {
+    return String(message.timestamp || message.message_id || `msg-${index}`);
+  };
+
+  const setAutomationStateForMessage = (messageId, status, error = '') => {
+    setAutomationButtonStates((prev) => ({
+      ...prev,
+      [messageId]: { status, error }
+    }));
+  };
+
+  const getAutomationStateForMessage = (messageId) => {
+    return automationButtonStates[messageId]?.status || 'idle';
+  };
+
+  const getAutomationStateLabel = (status) => {
+    if (status === 'starting') return 'Starting';
+    if (status === 'running') return 'Running';
+    if (status === 'done') return 'Done';
+    if (status === 'error') return 'Error';
+    return 'Automate';
+  };
+
+  const getAutomationStateClasses = (status) => {
+    if (status === 'starting' || status === 'running') {
+      return 'bg-primary/10 text-primary border-primary/30';
+    }
+    if (status === 'done') {
+      return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30';
+    }
+    if (status === 'error') {
+      return 'bg-destructive/10 text-destructive border-destructive/30';
+    }
+    return 'text-muted-foreground hover:text-foreground hover:bg-accent border-border';
+  };
+
+  const extractMissionSteps = (content) => {
+    const steps = [];
+    const numberedStepRegex = /(?:^|\n)\s*\d+[.)]\s+([\s\S]*?)(?=(?:\n\s*\d+[.)]\s+)|$)/g;
+
+    let match;
+    while ((match = numberedStepRegex.exec(content)) !== null) {
+      const step = match[1]
+        .replace(/\n+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^[-*]\s+/, '')
+        .trim();
+      if (step) {
+        steps.push(step);
+      }
+    }
+
+    return steps;
+  };
+
+  const extractGovInUrl = (content) => {
+    const match = content.match(/https?:\/\/(?:[a-zA-Z0-9-]+\.)*gov\.in(?:\/[^\s)\]]*)?/i);
+    if (!match) return '';
+    return match[0].replace(/[.,;:!?]+$/, '');
+  };
+
+  const normalizeAutomationStatus = (automationState) => {
+    const normalizeValue = (value) => {
+      const normalized = String(value || '').toLowerCase();
+      if (['starting', 'running', 'queued', 'in_progress', 'processing'].includes(normalized)) return 'running';
+      if (['done', 'completed', 'success', 'succeeded', 'finished'].includes(normalized)) return 'done';
+      if (['error', 'failed', 'failure', 'cancelled', 'canceled'].includes(normalized)) return 'error';
+      if (['idle', 'ready', 'waiting', 'not_started', 'stopped'].includes(normalized)) return 'idle';
+      return 'running';
+    };
+
+    if (!automationState) return 'idle';
+    if (typeof automationState === 'string') {
+      return normalizeValue(automationState);
+    }
+    return normalizeValue(automationState.status || automationState.state || automationState.phase);
+  };
+
+  const handleAutomateMessage = async (message, messageId) => {
+    const currentStatus = getAutomationStateForMessage(messageId);
+    if (currentStatus === 'starting' || currentStatus === 'running') {
+      return;
+    }
+
+    setAutomationStateForMessage(messageId, 'starting');
+
+    try {
+      const statusResponse = await api.get('/api/automation/status');
+      if (!statusResponse.data?.extension_connected) {
+        setAutomationStateForMessage(messageId, 'error', 'Automation extension is not connected');
+        return;
+      }
+
+      const missionSteps = extractMissionSteps(message.content || '');
+      if (missionSteps.length === 0) {
+        setAutomationStateForMessage(messageId, 'error', 'No numbered steps found in this response');
+        return;
+      }
+
+      const portalUrl = extractGovInUrl(message.content || '');
+      const missionId = `mission_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const missionTitle = (missionSteps[0] || 'Automation Task').slice(0, 120);
+      const missionDescription = (message.content || '').trim().slice(0, 3000);
+
+      await api.post('/api/automation/start', {
+        mission_id: missionId,
+        mission_title: missionTitle,
+        mission_description: missionDescription,
+        portal_url: portalUrl,
+        mission_steps: missionSteps
+      });
+
+      setAutomationStateForMessage(messageId, 'running');
+      setActiveAutomationMessageId(messageId);
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const errorMessage = typeof detail === 'string' ? detail : 'Failed to start automation';
+      setAutomationStateForMessage(messageId, 'error', errorMessage);
+      console.error('Automation start failed:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!activeAutomationMessageId) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const pollAutomationStatus = async () => {
+      try {
+        const response = await api.get('/api/automation/status');
+        if (isCancelled) {
+          return;
+        }
+
+        const extensionConnected = Boolean(response.data?.extension_connected);
+        const automationState = response.data?.automation_state;
+
+        if (!extensionConnected) {
+          setAutomationStateForMessage(activeAutomationMessageId, 'error', 'Automation extension disconnected');
+          setActiveAutomationMessageId(null);
+          return;
+        }
+
+        const normalizedStatus = normalizeAutomationStatus(automationState);
+        if (normalizedStatus === 'running') {
+          setAutomationStateForMessage(activeAutomationMessageId, 'running');
+          return;
+        }
+
+        if (normalizedStatus === 'error') {
+          const errorMessage = typeof automationState === 'object'
+            ? (automationState?.error || automationState?.message || 'Automation failed')
+            : 'Automation failed';
+          setAutomationStateForMessage(activeAutomationMessageId, 'error', errorMessage);
+          setActiveAutomationMessageId(null);
+          return;
+        }
+
+        if (normalizedStatus === 'done' || normalizedStatus === 'idle') {
+          setAutomationStateForMessage(activeAutomationMessageId, 'done');
+          setActiveAutomationMessageId(null);
+        }
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+        setAutomationStateForMessage(activeAutomationMessageId, 'error', 'Status check failed');
+        setActiveAutomationMessageId(null);
+        console.error('Automation status polling failed:', error);
+      }
+    };
+
+    pollAutomationStatus();
+    const intervalId = window.setInterval(pollAutomationStatus, 5000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeAutomationMessageId]);
   
   const handleDownloadDocument = async (message, format = 'pdf') => {
     if (isMetricLocked('pdf_exports')) {
@@ -1380,7 +1569,7 @@ function ChatInterface() {
   };
 
   const getDownloadMenuId = (message, index) => {
-    return String(message.timestamp || message.message_id || `msg-${index}`);
+    return getMessageActionId(message, index);
   };
 
   // Show loading screen while authenticating
@@ -1650,6 +1839,8 @@ function ChatInterface() {
             {messages.map((message, index) => {
               const menuId = getDownloadMenuId(message, index);
               const isDownloadMenuOpen = downloadMenuOpenFor === menuId;
+              const automationStatus = getAutomationStateForMessage(menuId);
+              const automationError = automationButtonStates[menuId]?.error || '';
 
               return (
                 <div
@@ -1707,6 +1898,32 @@ function ChatInterface() {
                         ) : (
                           <Copy01Icon size={16} />
                         )}
+                      </button>
+
+                      <button
+                        onClick={() => handleAutomateMessage(message, menuId)}
+                        disabled={automationStatus === 'starting' || automationStatus === 'running'}
+                        className={`h-7 px-2.5 rounded-md text-[11px] font-medium border transition-colors inline-flex items-center gap-1.5 ${
+                          getAutomationStateClasses(automationStatus)
+                        } ${
+                          automationStatus === 'starting' || automationStatus === 'running'
+                            ? 'cursor-wait'
+                            : ''
+                        }`}
+                        title={automationError || 'Send this response to the automation extension'}
+                      >
+                        <span
+                          className={`inline-block w-1.5 h-1.5 rounded-full ${
+                            automationStatus === 'starting' || automationStatus === 'running'
+                              ? 'bg-primary animate-pulse'
+                              : automationStatus === 'done'
+                                ? 'bg-emerald-500'
+                                : automationStatus === 'error'
+                                  ? 'bg-destructive'
+                                  : 'bg-muted-foreground'
+                          }`}
+                        />
+                        <span>{getAutomationStateLabel(automationStatus)}</span>
                       </button>
                       
                       {/* Download button with format dropdown - only for generated documents */}
