@@ -147,7 +147,8 @@ class AutomationService:
         mission_title: str,
         mission_description: str,
         portal_url: Optional[str],
-        mission_steps: List[str],
+        mission_steps: List,
+        machine_plan: Optional[Dict[str, Any]] = None,
     ):
         async with self._lock:
             session = self._sessions.get(user_id)
@@ -163,6 +164,8 @@ class AutomationService:
             "portal_url": portal_url,
             "mission_steps": mission_steps,
         }
+        if machine_plan:
+            command_payload["machine_plan"] = machine_plan
 
         # Try WebSocket first, fall back to polling queue
         sent_via_ws = False
