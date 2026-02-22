@@ -1000,6 +1000,9 @@ function ChatInterface() {
   };
 
   const handleSendMessage = async (messageOverride = null) => {
+    // Guard: if called directly from onClick, React passes a SyntheticEvent — ignore it
+    if (messageOverride && typeof messageOverride !== 'string') messageOverride = null;
+
     // If file is selected, do document analysis instead
     if (!messageOverride && selectedFile) {
       await handleDocumentAnalysis();
