@@ -1121,6 +1121,25 @@ async def start_ai_call(
     body = await request.json()
     conversation_id = body.get("conversation_id")
     language = body.get("language", "en")
+
+    # Create a conversation for voice calls if not provided so voice turns are persisted.
+    if conversation_id:
+        existing = await db.conversations.find_one(
+            {"conversation_id": conversation_id, "user_id": user["user_id"]},
+            {"_id": 0, "conversation_id": 1}
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+    else:
+        conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
+        conversation_doc = {
+            "conversation_id": conversation_id,
+            "user_id": user["user_id"],
+            "title": "Voice conversation",
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
+        }
+        await db.conversations.insert_one(conversation_doc)
     
     # Create call session
     call_id = ai_call_service.create_call_session(
@@ -1131,6 +1150,7 @@ async def start_ai_call(
     
     return {
         "call_id": call_id,
+        "conversation_id": conversation_id,
         "language": language,
         "message": "Call session started"
     }
@@ -1139,6 +1159,7 @@ async def start_ai_call(
 @app.post("/api/ai-call/turn")
 async def process_call_turn(
     call_id: str = None,
+    include_audio: bool = True,
     audio: UploadFile = File(...),
     authorization: Optional[str] = Header(None),
     request: Request = None
@@ -1160,21 +1181,24 @@ async def process_call_turn(
     
     # Read audio data
     audio_data = await audio.read()
+    if not audio_data:
+        raise HTTPException(status_code=400, detail="Empty audio payload")
+    if len(audio_data) > settings.VOICE_MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Audio payload too large")
     
-    # Get conversation context if available
+    # Get conversation context if available (loaded once, then cached per session)
     conversation_id = call_session.get("conversation_id")
-    conversation_context = ""
     knowledge_context = ""
-    document_context = ""
-    
-    if conversation_id:
+    if conversation_id and not call_session.get("context_loaded"):
         messages = []
         async for msg in db.messages.find(
             {"conversation_id": conversation_id},
             {"_id": 0}
-        ).sort("timestamp", 1).limit(10):
+        ).sort("timestamp", 1).limit(12):
             messages.append(msg)
-        
+
+        base_context = ""
+        document_context = ""
         if messages:
             regular_messages = []
             for m in messages:
@@ -1182,7 +1206,19 @@ async def process_call_turn(
                     document_context = m.get("content", "")
                 else:
                     regular_messages.append(f"{m['role']}: {m['content']}")
-            conversation_context = "\n".join(regular_messages)
+            base_context = "\n".join(regular_messages)
+
+        ai_call_service.set_initial_context(
+            call_id=call_id,
+            base_context=base_context,
+            document_context=document_context
+        )
+
+    base_context = call_session.get("base_context", "")
+    recent_turns = call_session.get("recent_turns", [])
+    turn_context = "\n".join(recent_turns[-8:])
+    conversation_context = "\n".join(part for part in [base_context, turn_context] if part).strip()
+    document_context = call_session.get("document_context", "")
     
     try:
         # Process audio turn
@@ -1191,7 +1227,19 @@ async def process_call_turn(
             audio_data=audio_data,
             conversation_context=conversation_context,
             knowledge_context=knowledge_context,
-            document_context=document_context
+            document_context=document_context,
+            include_audio=include_audio
+        )
+
+        result["conversation_id"] = conversation_id
+        if result.get("no_speech"):
+            return result
+
+        # Keep rolling in-memory context to avoid DB reads each turn.
+        ai_call_service.append_turn_context(
+            call_id=call_id,
+            user_text=result["transcribed_text"],
+            assistant_text=result["response_text"]
         )
         
         # Save messages to conversation if conversation_id exists

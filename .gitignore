@@ -24,6 +24,8 @@ wheels/
 venv/
 ENV/
 env/
+.venv/
+backend/.venv/
 
 # Environment variables
 .env
@@ -53,16 +55,8 @@ logs/
 node_modules/
 **/node_modules/
 frontend/node_modules/
+frontend/package-lock.json
 
 # React build
 build/
 .cache/
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
