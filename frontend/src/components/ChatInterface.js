@@ -10,9 +10,13 @@ import {
 import api from '../utils/api';
 import { ACTION_HUB_COPY, ACTION_HUB_SCHEMA } from '../config/actionHubConfig';
 import { Switch } from './ui/switch';
+import { useClientEnvironment } from '../utils/clientEnvironment';
 
 function ChatInterface() {
   const navigate = useNavigate();
+  const { isMobileViewport, isStandalonePWA, isDesktopBrowser } = useClientEnvironment();
+  const isCompactLayout = isMobileViewport || isStandalonePWA;
+
   const [user, setUser] = useState(null);
   const [billingStatus, setBillingStatus] = useState(null);
   const [conversations, setConversations] = useState([]);
@@ -23,7 +27,6 @@ function ChatInterface() {
   const [isAuthenticating, setIsAuthenticating] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [isDark, setIsDark] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [selectedLanguage, setSelectedLanguage] = useState('en'); // Language for STT
   const [selectedFile, setSelectedFile] = useState(null);
@@ -57,6 +60,23 @@ function ChatInterface() {
   const voiceListeningTimeoutRef = useRef(null);
   const voiceAudioContextRef = useRef(null);
   const isStartingVoiceListeningRef = useRef(false);
+  const mobileQuickPrompts = [
+    {
+      title: 'Analyze legal notice',
+      subtitle: 'and summarize next steps',
+      prompt: 'Please analyze this legal notice and explain what I should do next in simple terms.',
+    },
+    {
+      title: 'Draft RTI',
+      subtitle: 'for local authority',
+      prompt: 'Draft an RTI application to request status update from my local municipal office.',
+    },
+    {
+      title: 'Write complaint',
+      subtitle: 'with evidence checklist',
+      prompt: 'Help me draft a formal complaint and include a checklist of documents to attach.',
+    },
+  ];
 
   const clearVoiceRuntimeArtifacts = () => {
     if (voiceVadFrameRef.current !== null) {
@@ -114,15 +134,10 @@ function ChatInterface() {
   }, [isDark]);
 
   useEffect(() => {
-    const onResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      setSidebarOpen((prev) => (mobile ? prev : true));
-    };
-
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+    if (!isCompactLayout) {
+      setSidebarOpen(true);
+    }
+  }, [isCompactLayout]);
 
   useEffect(() => {
     scrollToBottom();
@@ -217,7 +232,7 @@ function ChatInterface() {
       setCurrentConversation(conversationId);
       setAutomationButtonStates({});
       setActiveAutomationMessageId(null);
-      if (isMobile) setSidebarOpen(false);
+      if (isCompactLayout) setSidebarOpen(false);
     } catch (error) {
       console.error('Failed to load conversation:', error);
     }
@@ -1050,7 +1065,7 @@ function ChatInterface() {
     setMessages([]);
     setAutomationButtonStates({});
     setActiveAutomationMessageId(null);
-    if (isMobile) setSidebarOpen(false);
+    if (isCompactLayout) setSidebarOpen(false);
   };
 
   const handleDeleteConversation = async (conversationId, e) => {
@@ -1514,6 +1529,14 @@ function ChatInterface() {
   };
 
   const handleAutomateMessage = async (message, messageId) => {
+    if (!isDesktopBrowser) {
+      setActionToast({
+        tone: 'error',
+        message: 'Automation extension is available only in desktop browser mode.',
+      });
+      return;
+    }
+
     const currentStatus = getAutomationStateForMessage(messageId);
     if (currentStatus === 'starting' || currentStatus === 'running') {
       return;
@@ -1576,6 +1599,9 @@ function ChatInterface() {
   };
 
   useEffect(() => {
+    if (!isDesktopBrowser) {
+      return undefined;
+    }
     if (!activeAutomationMessageId) {
       return undefined;
     }
@@ -1634,7 +1660,7 @@ function ChatInterface() {
       isCancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeAutomationMessageId]);
+  }, [activeAutomationMessageId, isDesktopBrowser]);
   
   const handleDownloadDocument = async (message, format = 'pdf') => {
     if (isMetricLocked('pdf_exports')) {
@@ -1833,7 +1859,7 @@ function ChatInterface() {
   return (
     <div className="min-h-screen h-[100dvh] bg-background flex overflow-hidden relative">
       {/* Mobile backdrop */}
-      {isMobile && sidebarOpen && (
+      {isCompactLayout && sidebarOpen && (
         <button
           className="absolute inset-0 bg-black/30 z-30"
           onClick={() => setSidebarOpen(false)}
@@ -1845,7 +1871,7 @@ function ChatInterface() {
       <div
         className={`bg-card border-r border-border flex flex-col transition-all duration-300 h-full
         ${
-          isMobile
+          isCompactLayout
             ? `fixed inset-y-0 left-0 z-40 w-72 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
             : `${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden`
         }`}
@@ -1921,6 +1947,13 @@ function ChatInterface() {
                 <ArrowRight01Icon size={14} />
               </button>
             )}
+            <button
+              onClick={toggleTheme}
+              className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
+            >
+              <span>{isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme'}</span>
+              {isDark ? <Sun03Icon size={14} /> : <Moon02Icon size={14} />}
+            </button>
           </div>
 
           <button
@@ -1936,60 +1969,84 @@ function ChatInterface() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative z-10">
         {/* Chat Header */}
-        <header className="bg-card border-b border-border px-3 sm:px-4 py-3 flex flex-wrap items-start sm:items-center justify-between gap-2 flex-shrink-0">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-            >
-              <Menu01Icon size={20} />
-            </button>
-            <div className="min-w-0">
-              <h1 className="text-base sm:text-lg font-bold text-foreground truncate">RakshaAI Chat</h1>
-              <p className="hidden sm:block text-xs text-muted-foreground">AI-powered legal & financial guidance</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center flex-wrap justify-end gap-1.5 sm:gap-2">
-            <div className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
-              <span className="text-xs text-muted-foreground">Admin</span>
-              <Switch
-                checked={user?.role === 'admin' || user?.role === 'superadmin'}
-                onCheckedChange={toggleDemoAdminRole}
-                disabled={isRoleUpdating}
-                aria-label="Toggle admin view"
-              />
-            </div>
-
-            {/* Language Selector for Voice */}
-            <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-muted text-xs">
-              <span className="hidden sm:inline text-muted-foreground">Voice:</span>
-              <select
-                value={selectedLanguage}
-                onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="bg-transparent text-foreground text-xs sm:text-sm font-medium outline-none cursor-pointer max-w-[108px] sm:max-w-none"
+        <header
+          className={`bg-card border-b border-border flex-shrink-0 ${
+            isCompactLayout
+              ? 'px-3 py-2.5 grid grid-cols-[auto_1fr_auto] items-center gap-2'
+              : 'px-3 sm:px-4 py-3 flex flex-wrap items-start sm:items-center justify-between gap-2'
+          }`}
+        >
+          {isCompactLayout ? (
+            <>
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="h-10 w-10 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                aria-label="Toggle menu"
               >
-                <option value="en">English</option>
-                <option value="hi">हिन्दी (Hindi)</option>
-              </select>
-            </div>
+                <Menu01Icon size={20} />
+              </button>
+              <div className="text-center">
+                <h1 className="text-base font-semibold text-foreground">RakshaAI</h1>
+                <p className="text-[11px] text-muted-foreground">Ask anything</p>
+              </div>
+              <button
+                onClick={handleNewChat}
+                className="h-10 w-10 inline-flex items-center justify-center rounded-full border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                aria-label="Start new chat"
+                title="New chat"
+              >
+                <Add01Icon size={18} />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                >
+                  <Menu01Icon size={20} />
+                </button>
+                <div className="min-w-0">
+                  <h1 className="text-base sm:text-lg font-bold text-foreground truncate">RakshaAI Chat</h1>
+                  <p className="hidden sm:block text-xs text-muted-foreground">AI-powered legal & financial guidance</p>
+                </div>
+              </div>
 
-            <button
-              onClick={toggleTheme}
-              className="p-1.5 sm:p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-            >
-              {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
-            </button>
+              <div className="flex items-center flex-wrap justify-end gap-1.5 sm:gap-2">
+                {isDesktopBrowser && (
+                  <div className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
+                    <span className="text-xs text-muted-foreground">Admin</span>
+                    <Switch
+                      checked={user?.role === 'admin' || user?.role === 'superadmin'}
+                      onCheckedChange={toggleDemoAdminRole}
+                      disabled={isRoleUpdating}
+                      aria-label="Toggle admin view"
+                    />
+                  </div>
+                )}
 
-            <div className="sm:hidden rounded-lg border border-border bg-muted/40 px-2 py-1.5">
-              <Switch
-                checked={user?.role === 'admin' || user?.role === 'superadmin'}
-                onCheckedChange={toggleDemoAdminRole}
-                disabled={isRoleUpdating}
-                aria-label="Toggle admin view"
-              />
-            </div>
-          </div>
+                <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-muted text-xs">
+                  <span className="hidden sm:inline text-muted-foreground">Voice:</span>
+                  <select
+                    value={selectedLanguage}
+                    onChange={(e) => setSelectedLanguage(e.target.value)}
+                    className="bg-transparent text-foreground text-xs sm:text-sm font-medium outline-none cursor-pointer max-w-[108px] sm:max-w-none"
+                  >
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी (Hindi)</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={toggleTheme}
+                  className="p-1.5 sm:p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                >
+                  {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
+                </button>
+              </div>
+            </>
+          )}
         </header>
 
         {/* Messages Area - Fixed Height, Scrollable */}
@@ -2159,31 +2216,33 @@ function ChatInterface() {
                         )}
                       </button>
 
-                      <button
-                        onClick={() => handleAutomateMessage(message, menuId)}
-                        disabled={automationStatus === 'starting' || automationStatus === 'running'}
-                        className={`h-7 px-2.5 rounded-md text-[11px] font-medium border transition-colors inline-flex items-center gap-1.5 ${
-                          getAutomationStateClasses(automationStatus)
-                        } ${
-                          automationStatus === 'starting' || automationStatus === 'running'
-                            ? 'cursor-wait'
-                            : ''
-                        }`}
-                        title={automationError || 'Send this response to the automation extension'}
-                      >
-                        <span
-                          className={`inline-block w-1.5 h-1.5 rounded-full ${
+                      {isDesktopBrowser && (
+                        <button
+                          onClick={() => handleAutomateMessage(message, menuId)}
+                          disabled={automationStatus === 'starting' || automationStatus === 'running'}
+                          className={`h-7 px-2.5 rounded-md text-[11px] font-medium border transition-colors inline-flex items-center gap-1.5 ${
+                            getAutomationStateClasses(automationStatus)
+                          } ${
                             automationStatus === 'starting' || automationStatus === 'running'
-                              ? 'bg-primary animate-pulse'
-                              : automationStatus === 'done'
-                                ? 'bg-emerald-500'
-                                : automationStatus === 'error'
-                                  ? 'bg-destructive'
-                                  : 'bg-muted-foreground'
+                              ? 'cursor-wait'
+                              : ''
                           }`}
-                        />
-                        <span>{getAutomationStateLabel(automationStatus)}</span>
-                      </button>
+                          title={automationError || 'Send this response to the automation extension'}
+                        >
+                          <span
+                            className={`inline-block w-1.5 h-1.5 rounded-full ${
+                              automationStatus === 'starting' || automationStatus === 'running'
+                                ? 'bg-primary animate-pulse'
+                                : automationStatus === 'done'
+                                  ? 'bg-emerald-500'
+                                  : automationStatus === 'error'
+                                    ? 'bg-destructive'
+                                    : 'bg-muted-foreground'
+                            }`}
+                          />
+                          <span>{getAutomationStateLabel(automationStatus)}</span>
+                        </button>
+                      )}
                       
                       {/* Download button with format dropdown - only for generated documents */}
                       {isGeneratedDocument(message) && (
@@ -2256,8 +2315,38 @@ function ChatInterface() {
         </div>
 
         {/* Input Area - Fixed at Bottom */}
-        <div className="bg-card border-t border-border p-3 sm:p-4 flex-shrink-0" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}>
+        <div
+          className={`border-t border-border flex-shrink-0 ${
+            isCompactLayout ? 'bg-card/95 px-3 pt-2' : 'bg-card p-3 sm:p-4'
+          }`}
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
+        >
           <div className="max-w-4xl mx-auto">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+
+            {isCompactLayout && !isInVoiceMode && messages.length === 0 && !selectedFile && (
+              <div className="mb-3 -mx-1 overflow-x-auto pb-1">
+                <div className="flex gap-2 px-1">
+                  {mobileQuickPrompts.map((item) => (
+                    <button
+                      key={item.title}
+                      onClick={() => setInputMessage(item.prompt)}
+                      className="min-w-[220px] rounded-2xl border border-border bg-muted/45 px-4 py-3 text-left transition-colors hover:bg-accent/80"
+                    >
+                      <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.subtitle}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Voice Conversation Mode UI */}
             {isInVoiceMode && (
               <div className="mb-4 p-4 sm:p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border-2 border-purple-500/30">
@@ -2346,87 +2435,187 @@ function ChatInterface() {
             
             {/* Regular Input Controls (Hidden in Voice Mode) */}
             {!isInVoiceMode && (
-              <div className="flex items-end gap-2 sm:gap-3">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    onClick={startVoiceConversation}
-                    disabled={isMetricLocked('stt_requests')}
-                    className={`p-2.5 sm:p-3 rounded-lg transition-colors ${
-                      isMetricLocked('stt_requests')
-                        ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                    }`}
-                    title={isMetricLocked('stt_requests') ? 'Voice quota exhausted. Upgrade plan.' : 'Start AI voice conversation'}
-                  >
-                    <Call02Icon size={20} />
-                  </button>
+              <>
+                {isCompactLayout ? (
+                  <div className="rounded-[2rem] border border-border bg-background px-3 pt-3 pb-2 shadow-sm">
+                    <textarea
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder={selectedFile ? 'Add a question about the document (optional)...' : 'Ask anything'}
+                      className="w-full bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground px-1"
+                      rows={2}
+                      style={{ maxHeight: '140px' }}
+                    />
 
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isMetricLocked('document_analysis')}
-                    className={`p-2.5 sm:p-3 rounded-lg transition-colors ${
-                      isMetricLocked('document_analysis')
-                        ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                    }`}
-                    title={isMetricLocked('document_analysis') ? 'Document analysis quota exhausted. Upgrade plan.' : 'Upload document (legal notice, certificate, etc.)'}
-                  >
-                    <AttachmentIcon size={20} />
-                  </button>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isMetricLocked('document_analysis')}
+                          className={`h-10 w-10 inline-flex items-center justify-center rounded-full transition-colors ${
+                            isMetricLocked('document_analysis')
+                              ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                              : 'text-foreground hover:bg-accent'
+                          }`}
+                          title={
+                            isMetricLocked('document_analysis')
+                              ? 'Document analysis quota exhausted. Upgrade plan.'
+                              : 'Upload document'
+                          }
+                        >
+                          <Add01Icon size={20} />
+                        </button>
 
-                  <button
-                    onClick={isRecording ? handleStopRecording : handleStartRecording}
-                    disabled={!isRecording && isMetricLocked('stt_requests')}
-                    className={`p-2.5 sm:p-3 transition-colors rounded-lg ${
-                      isRecording
-                        ? 'bg-destructive text-destructive-foreground animate-pulse'
-                        : isMetricLocked('stt_requests')
-                          ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                    }`}
-                    title={
-                      isMetricLocked('stt_requests') && !isRecording
-                        ? 'Voice quota exhausted. Upgrade plan.'
-                        : 'Voice to text'
-                    }
-                  >
-                    <Mic01Icon size={20} />
-                  </button>
-                </div>
+                        <button
+                          onClick={() => setSidebarOpen(true)}
+                          className="h-10 w-10 inline-flex items-center justify-center rounded-full text-foreground hover:bg-accent transition-colors"
+                          title="Open chats and settings"
+                        >
+                          <Menu01Icon size={20} />
+                        </button>
 
-                <div className="flex-1 bg-input rounded-[1.4rem] px-3 sm:px-5 py-2.5 sm:py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
-                  <textarea
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder={selectedFile ? "Add a question about the document (optional)..." : "Type your message..."}
-                    className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
-                    rows={1}
-                    style={{ maxHeight: '120px' }}
-                  />
-                </div>
+                        <div className="rounded-full border border-border px-2 py-1.5">
+                          <select
+                            value={selectedLanguage}
+                            onChange={(e) => setSelectedLanguage(e.target.value)}
+                            className="bg-transparent text-xs text-foreground outline-none"
+                            aria-label="Voice language"
+                          >
+                            <option value="en">EN</option>
+                            <option value="hi">HI</option>
+                          </select>
+                        </div>
+                      </div>
 
-                <button
-                  onClick={() => handleSendMessage()}
-                  disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
-                  className="p-2.5 sm:p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
-                  title={selectedFile ? "Analyze document" : "Send message"}
-                >
-                  {isAnalyzing ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <ArrowRight01Icon size={20} />
-                  )}
-                </button>
-              </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={isRecording ? handleStopRecording : handleStartRecording}
+                          disabled={!isRecording && isMetricLocked('stt_requests')}
+                          className={`h-10 w-10 inline-flex items-center justify-center rounded-full transition-colors ${
+                            isRecording
+                              ? 'bg-destructive text-destructive-foreground animate-pulse'
+                              : isMetricLocked('stt_requests')
+                                ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                                : 'text-foreground hover:bg-accent'
+                          }`}
+                          title={
+                            isMetricLocked('stt_requests') && !isRecording
+                              ? 'Voice quota exhausted. Upgrade plan.'
+                              : 'Voice to text'
+                          }
+                        >
+                          <Mic01Icon size={20} />
+                        </button>
+
+                        <button
+                          onClick={startVoiceConversation}
+                          disabled={isMetricLocked('stt_requests')}
+                          className={`h-10 w-10 inline-flex items-center justify-center rounded-full transition-colors ${
+                            isMetricLocked('stt_requests')
+                              ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                              : 'bg-foreground text-background hover:opacity-90'
+                          }`}
+                          title={
+                            isMetricLocked('stt_requests')
+                              ? 'Voice quota exhausted. Upgrade plan.'
+                              : 'Start AI voice conversation'
+                          }
+                        >
+                          <Call02Icon size={18} />
+                        </button>
+
+                        <button
+                          onClick={handleSendMessage}
+                          disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
+                          className="h-10 w-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          title={selectedFile ? 'Analyze document' : 'Send message'}
+                        >
+                          {isAnalyzing ? (
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <ArrowRight01Icon size={18} />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-end gap-2 sm:gap-3">
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={startVoiceConversation}
+                        disabled={isMetricLocked('stt_requests')}
+                        className={`p-2.5 sm:p-3 rounded-lg transition-colors ${
+                          isMetricLocked('stt_requests')
+                            ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                        }`}
+                        title={isMetricLocked('stt_requests') ? 'Voice quota exhausted. Upgrade plan.' : 'Start AI voice conversation'}
+                      >
+                        <Call02Icon size={20} />
+                      </button>
+
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isMetricLocked('document_analysis')}
+                        className={`p-2.5 sm:p-3 rounded-lg transition-colors ${
+                          isMetricLocked('document_analysis')
+                            ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                        }`}
+                        title={isMetricLocked('document_analysis') ? 'Document analysis quota exhausted. Upgrade plan.' : 'Upload document (legal notice, certificate, etc.)'}
+                      >
+                        <AttachmentIcon size={20} />
+                      </button>
+
+                      <button
+                        onClick={isRecording ? handleStopRecording : handleStartRecording}
+                        disabled={!isRecording && isMetricLocked('stt_requests')}
+                        className={`p-2.5 sm:p-3 transition-colors rounded-lg ${
+                          isRecording
+                            ? 'bg-destructive text-destructive-foreground animate-pulse'
+                            : isMetricLocked('stt_requests')
+                              ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                        }`}
+                        title={
+                          isMetricLocked('stt_requests') && !isRecording
+                            ? 'Voice quota exhausted. Upgrade plan.'
+                            : 'Voice to text'
+                        }
+                      >
+                        <Mic01Icon size={20} />
+                      </button>
+                    </div>
+
+                    <div className="flex-1 bg-input rounded-[1.4rem] px-3 sm:px-5 py-2.5 sm:py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
+                      <textarea
+                        value={inputMessage}
+                        onChange={(e) => setInputMessage(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder={selectedFile ? 'Add a question about the document (optional)...' : 'Type your message...'}
+                        className="flex-1 bg-transparent border-none outline-none resize-none text-foreground placeholder-muted-foreground"
+                        rows={1}
+                        style={{ maxHeight: '120px' }}
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
+                      className="p-2.5 sm:p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                      title={selectedFile ? 'Analyze document' : 'Send message'}
+                    >
+                      {isAnalyzing ? (
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <ArrowRight01Icon size={20} />
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
