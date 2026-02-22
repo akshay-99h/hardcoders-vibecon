@@ -90,7 +90,7 @@ function LandingPage() {
         </div>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-8 lg:py-8 flex flex-col items-center justify-start lg:justify-center min-h-screen lg:min-h-0 lg:h-full gap-8 lg:gap-0">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-8 lg:py-8 flex flex-col items-center justify-center min-h-screen lg:min-h-0 lg:h-full gap-8 lg:gap-0">
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-12 items-center">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.1 }} className="text-center lg:text-left">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
@@ -110,6 +110,29 @@ function LandingPage() {
                 {t(language, 'landingPage.seeHowItWorks')}
               </Button>
             </div>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.35 }}
+              className="relative mx-auto mb-2 h-28 w-full max-w-[320px] overflow-hidden rounded-3xl border border-border/70 bg-card/55 shadow-sm backdrop-blur-sm lg:hidden"
+            >
+              <div className="absolute -left-10 top-4 h-20 w-20 rounded-full bg-primary/20 blur-2xl" />
+              <div className="absolute -right-8 -top-4 h-24 w-24 rounded-full bg-sky-400/20 blur-2xl dark:bg-primary/20" />
+              <div className="absolute -bottom-12 left-1/2 h-20 w-32 -translate-x-1/2 rounded-full bg-primary/20 blur-2xl" />
+              <div className="absolute inset-x-4 bottom-5 top-5 rounded-2xl border border-border/50 bg-background/80 px-4 py-3">
+                <div className="flex h-full items-center justify-between">
+                  <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5">
+                    <HiShieldCheck className="h-4 w-4 text-primary" />
+                    <span className="text-xs font-semibold text-primary">AI Assist</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-primary/55" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-primary/40" />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.8 }} className="hidden lg:flex flex-col gap-3">
               <div className="flex items-center gap-6 text-sm text-muted-foreground">
                 <button onClick={() => window.location.href = '/terms'} className="hover:text-foreground transition-colors">

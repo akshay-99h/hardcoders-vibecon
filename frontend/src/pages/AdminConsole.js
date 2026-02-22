@@ -169,8 +169,7 @@ function ChartCard({ title, subtitle, children }) {
 function AdminConsole() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isMobileViewport, isStandalonePWA } = useClientEnvironment();
-  const isCompactLayout = isMobileViewport || isStandalonePWA;
+  const { isCompactLayout } = useClientEnvironment();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

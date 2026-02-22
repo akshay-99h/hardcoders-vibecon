@@ -59,8 +59,7 @@ function ProgressStep({ index, active, done, label }) {
 }
 
 export default function ContactSupportBlock({ defaultName = '', defaultEmail = '' }) {
-  const { isMobileViewport, isStandalonePWA } = useClientEnvironment();
-  const compact = isMobileViewport || isStandalonePWA;
+  const { isCompactLayout: compact } = useClientEnvironment();
 
   const [step, setStep] = useState(1);
   const [topic, setTopic] = useState('');
