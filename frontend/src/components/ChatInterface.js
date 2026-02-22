@@ -1802,7 +1802,7 @@ function ChatInterface() {
   // Show loading screen while authenticating
   if (isAuthenticating) {
     return (
-      <div className="h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen h-[100dvh] bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-muted-foreground">Authenticating...</p>
@@ -1812,7 +1812,7 @@ function ChatInterface() {
   }
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden relative">
+    <div className="min-h-screen h-[100dvh] bg-background flex overflow-hidden relative">
       {/* Mobile backdrop */}
       {isMobile && sidebarOpen && (
         <button
@@ -1917,21 +1917,21 @@ function ChatInterface() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative z-10">
         {/* Chat Header */}
-        <header className="bg-card border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="bg-card border-b border-border px-3 sm:px-4 py-3 flex flex-wrap items-start sm:items-center justify-between gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
               <Menu01Icon size={20} />
             </button>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">RakshaAI Chat</h1>
-              <p className="text-xs text-muted-foreground">AI-powered legal & financial guidance</p>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-foreground truncate">RakshaAI Chat</h1>
+              <p className="hidden sm:block text-xs text-muted-foreground">AI-powered legal & financial guidance</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap justify-end gap-1.5 sm:gap-2">
             <div className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
               <span className="text-xs text-muted-foreground">Admin</span>
               <Switch
@@ -1943,12 +1943,12 @@ function ChatInterface() {
             </div>
 
             {/* Language Selector for Voice */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-xs">
-              <span className="text-muted-foreground">Voice:</span>
+            <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-muted text-xs">
+              <span className="hidden sm:inline text-muted-foreground">Voice:</span>
               <select
                 value={selectedLanguage}
                 onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="bg-transparent text-foreground font-medium outline-none cursor-pointer"
+                className="bg-transparent text-foreground text-xs sm:text-sm font-medium outline-none cursor-pointer max-w-[108px] sm:max-w-none"
               >
                 <option value="en">English</option>
                 <option value="hi">हिन्दी (Hindi)</option>
@@ -1957,7 +1957,7 @@ function ChatInterface() {
 
             <button
               onClick={toggleTheme}
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+              className="p-1.5 sm:p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
               {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
             </button>
@@ -1974,7 +1974,7 @@ function ChatInterface() {
         </header>
 
         {/* Messages Area - Fixed Height, Scrollable */}
-        <div className="flex-1 overflow-y-auto p-4 min-h-0">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 min-h-0">
           <div className="max-w-4xl mx-auto space-y-4">
             {actionToast && (
               <div
@@ -2077,7 +2077,7 @@ function ChatInterface() {
                   key={index}
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
                 >
-                  <div className="flex flex-col gap-2 max-w-[85%]">
+                  <div className="flex flex-col gap-2 max-w-[90%] sm:max-w-[85%]">
                   <div
                     className={`rounded-[1.4rem] px-5 py-3 ${
                       message.role === 'user'
@@ -2116,7 +2116,7 @@ function ChatInterface() {
                   
                   {/* Action buttons for assistant messages */}
                   {message.role === 'assistant' && (
-                    <div className="flex items-center gap-2 px-2">
+                    <div className="flex flex-wrap items-center gap-2 px-2">
                       <button
                         onClick={() => handleTextToSpeech(message)}
                         className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
@@ -2237,13 +2237,13 @@ function ChatInterface() {
         </div>
 
         {/* Input Area - Fixed at Bottom */}
-        <div className="bg-card border-t border-border p-4 flex-shrink-0">
+        <div className="bg-card border-t border-border p-3 sm:p-4 flex-shrink-0" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}>
           <div className="max-w-4xl mx-auto">
             {/* Voice Conversation Mode UI */}
             {isInVoiceMode && (
-              <div className="mb-4 p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border-2 border-purple-500/30">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
+              <div className="mb-4 p-4 sm:p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border-2 border-purple-500/30">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-start gap-3 sm:gap-4 w-full">
                     <div className="relative">
                       <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
                         voiceState === 'listening' ? 'bg-purple-500' :
@@ -2260,7 +2260,7 @@ function ChatInterface() {
                       </div>
                     </div>
                     
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <h3 className="text-lg font-semibold text-foreground">
                         {voiceState === 'listening' && 'Listening...'}
                         {voiceState === 'thinking' && 'Processing...'}
@@ -2288,7 +2288,7 @@ function ChatInterface() {
                     </div>
                   </div>
                   
-                  <div className="flex gap-2">
+                  <div className="flex w-full justify-end gap-2 md:w-auto">
                     <button
                       onClick={endVoiceConversation}
                       className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:opacity-90 transition-all"
@@ -2327,7 +2327,7 @@ function ChatInterface() {
             
             {/* Regular Input Controls (Hidden in Voice Mode) */}
             {!isInVoiceMode && (
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 sm:gap-3">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -2340,7 +2340,7 @@ function ChatInterface() {
                   <button
                     onClick={startVoiceConversation}
                     disabled={isMetricLocked('stt_requests')}
-                    className={`p-3 rounded-lg transition-colors ${
+                    className={`p-2.5 sm:p-3 rounded-lg transition-colors ${
                       isMetricLocked('stt_requests')
                         ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -2353,7 +2353,7 @@ function ChatInterface() {
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isMetricLocked('document_analysis')}
-                    className={`p-3 rounded-lg transition-colors ${
+                    className={`p-2.5 sm:p-3 rounded-lg transition-colors ${
                       isMetricLocked('document_analysis')
                         ? 'text-muted-foreground/50 bg-muted cursor-not-allowed'
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -2366,7 +2366,7 @@ function ChatInterface() {
                   <button
                     onClick={isRecording ? handleStopRecording : handleStartRecording}
                     disabled={!isRecording && isMetricLocked('stt_requests')}
-                    className={`p-3 transition-colors rounded-lg ${
+                    className={`p-2.5 sm:p-3 transition-colors rounded-lg ${
                       isRecording
                         ? 'bg-destructive text-destructive-foreground animate-pulse'
                         : isMetricLocked('stt_requests')
@@ -2383,7 +2383,7 @@ function ChatInterface() {
                   </button>
                 </div>
 
-                <div className="flex-1 bg-input rounded-[1.4rem] px-5 py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
+                <div className="flex-1 bg-input rounded-[1.4rem] px-3 sm:px-5 py-2.5 sm:py-3 flex items-center border border-border focus-within:ring-2 focus-within:ring-ring transition-all">
                   <textarea
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
@@ -2398,7 +2398,7 @@ function ChatInterface() {
                 <button
                   onClick={handleSendMessage}
                   disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
-                  className="p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                  className="p-2.5 sm:p-3 bg-primary text-primary-foreground rounded-full hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
                   title={selectedFile ? "Analyze document" : "Send message"}
                 >
                   {isAnalyzing ? (

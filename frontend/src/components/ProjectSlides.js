@@ -657,11 +657,11 @@ function ProjectSlides() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
+    <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden">
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_15%_20%,rgba(15,73,189,0.18),transparent_40%),radial-gradient(circle_at_85%_10%,rgba(16,185,129,0.12),transparent_35%),radial-gradient(circle_at_50%_95%,rgba(15,73,189,0.12),transparent_45%)]" />
 
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-6 pb-4">
-        <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
               <HiShieldCheck className="w-5 h-5" />
@@ -671,7 +671,7 @@ function ProjectSlides() {
               <p className="text-sm font-semibold text-foreground">RakshaAI Evaluation Deck</p>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Use keyboard: ← / →</p>
+          <p className="hidden sm:block text-xs text-muted-foreground">Use keyboard: ← / →</p>
         </div>
 
         <div className="rounded-3xl border border-border bg-background/75 backdrop-blur-sm shadow-lg p-3 sm:p-5">
@@ -706,7 +706,7 @@ function ProjectSlides() {
               {renderSlideContent()}
 
               <div className="mt-5 rounded-2xl border border-dashed border-border bg-background/70 p-4">
-                <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Your Pointers</p>
                   <p className="text-xs text-muted-foreground">Saved locally on this browser</p>
                 </div>
@@ -721,8 +721,8 @@ function ProjectSlides() {
           </AnimatePresence>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-border bg-card/70 p-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="mt-4 rounded-2xl border border-border bg-card/70 p-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={goPrev} disabled={slideIndex === 0}>
               <HiArrowLeft className="w-4 h-4" />
               Left
@@ -736,7 +736,7 @@ function ProjectSlides() {
             </Button>
           </div>
 
-          <div className="text-sm text-muted-foreground font-medium">
+          <div className="text-xs sm:text-sm text-muted-foreground font-medium">
             Slide {slideIndex + 1} / {SLIDES.length}
           </div>
         </div>

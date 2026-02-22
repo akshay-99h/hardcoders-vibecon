@@ -1044,7 +1044,7 @@ function AdminConsole() {
 
       <div className="mx-auto flex min-h-screen max-w-[1600px]">
         <aside
-          className={`z-40 flex h-screen flex-col border-r border-border bg-card transition-transform duration-300 ${
+          className={`z-40 flex h-[100dvh] flex-col border-r border-border bg-card transition-transform duration-300 ${
             isMobile
               ? `fixed left-0 top-0 w-[290px] ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
               : 'sticky top-0 w-[290px] translate-x-0'
