@@ -9,6 +9,7 @@ import {
 } from 'hugeicons-react';
 import api from '../utils/api';
 import { ACTION_HUB_COPY, ACTION_HUB_SCHEMA } from '../config/actionHubConfig';
+import { Switch } from './ui/switch';
 
 function ChatInterface() {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ function ChatInterface() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [downloadMenuOpenFor, setDownloadMenuOpenFor] = useState(null);
   const [isRoleUpdating, setIsRoleUpdating] = useState(false);
   const [activeAction, setActiveAction] = useState(null);
   const [actionFormValues, setActionFormValues] = useState({});
@@ -92,6 +94,17 @@ function ChatInterface() {
     const timeoutId = window.setTimeout(() => setActionToast(null), 2800);
     return () => window.clearTimeout(timeoutId);
   }, [actionToast]);
+
+  useEffect(() => {
+    const handleGlobalClick = (event) => {
+      if (!(event.target instanceof HTMLElement)) return;
+      if (event.target.closest('[data-download-menu="true"]')) return;
+      setDownloadMenuOpenFor(null);
+    };
+
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   const handleAuthCallback = async () => {
     setIsAuthenticating(true);
@@ -187,9 +200,11 @@ function ChatInterface() {
     setIsDark(!isDark);
   };
 
-  const toggleDemoAdminRole = async () => {
+  const toggleDemoAdminRole = async (forceAdmin = null) => {
     if (!user || isRoleUpdating) return;
-    const nextIsAdmin = user.role !== 'admin' && user.role !== 'superadmin';
+    const nextIsAdmin = typeof forceAdmin === 'boolean'
+      ? forceAdmin
+      : (user.role !== 'admin' && user.role !== 'superadmin');
     setIsRoleUpdating(true);
 
     try {
@@ -1186,13 +1201,15 @@ function ChatInterface() {
     }
   };
   
-  const handleDownloadPDF = async (message) => {
+  const handleDownloadDocument = async (message, format = 'pdf') => {
     if (isMetricLocked('pdf_exports')) {
       navigate('/billing');
       return;
     }
 
     try {
+      setDownloadMenuOpenFor(null);
+
       // Extract only the document portion (remove AI explanations)
       const cleanDocument = extractDocumentOnly(message.content);
       
@@ -1217,8 +1234,15 @@ function ChatInterface() {
         documentType = "Email_Draft";
       }
       
-      // Call PDF generation API
-      const response = await api.post('/api/generate-pdf', {
+      const isDocx = format === 'docx';
+      const endpoint = isDocx ? '/api/generate-docx' : '/api/generate-pdf';
+      const extension = isDocx ? 'docx' : 'pdf';
+      const contentType = isDocx
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : 'application/pdf';
+
+      // Call document generation API
+      const response = await api.post(endpoint, {
         document_type: documentType,
         document_content: cleanDocument,
         user_name: "Citizen"
@@ -1227,10 +1251,10 @@ function ChatInterface() {
       });
       
       // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: contentType }));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${documentType}_${Date.now()}.pdf`);
+      link.setAttribute('download', `${documentType}_${Date.now()}.${extension}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -1240,8 +1264,8 @@ function ChatInterface() {
     } catch (err) {
       const handled = await handleQuotaError(err);
       if (handled) return;
-      console.error('Failed to generate PDF:', err);
-      alert('Failed to generate PDF. Please try again.');
+      console.error(`Failed to generate ${format.toUpperCase()}:`, err);
+      alert(`Failed to generate ${format.toUpperCase()}. Please try again.`);
     }
   };
   
@@ -1351,8 +1375,12 @@ function ChatInterface() {
       'grievance regarding',
       'complaint regarding'
     ];
-    
+
     return indicators.some(indicator => content.includes(indicator)) && content.length > 200;
+  };
+
+  const getDownloadMenuId = (message, index) => {
+    return String(message.timestamp || message.message_id || `msg-${index}`);
   };
 
   // Show loading screen while authenticating
@@ -1428,7 +1456,7 @@ function ChatInterface() {
 
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-border flex-shrink-0">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3">
             {user?.picture ? (
               <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full" />
             ) : (
@@ -1440,27 +1468,33 @@ function ChatInterface() {
               <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
             </div>
           </div>
+
+          <div className="mt-3 space-y-1">
+            <button
+              onClick={() => navigate('/billing')}
+              className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
+            >
+              <span>Billing & Usage</span>
+              <ArrowRight01Icon size={14} />
+            </button>
+            {(user?.role === 'admin' || user?.role === 'superadmin') && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="w-full rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-between"
+              >
+                <span>Admin Console</span>
+                <ArrowRight01Icon size={14} />
+              </button>
+            )}
+          </div>
+
           <button
             onClick={handleLogout}
-            className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+            className="w-full mt-3 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center gap-2"
           >
             <Logout01Icon size={16} />
             <span>Logout</span>
           </button>
-          <button
-            onClick={() => navigate('/billing')}
-            className="w-full mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
-          >
-            Billing & Usage
-          </button>
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <button
-              onClick={() => navigate('/admin')}
-              className="w-full mt-1 text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
-            >
-              Admin Console
-            </button>
-          )}
         </div>
       </div>
 
@@ -1482,6 +1516,16 @@ function ChatInterface() {
           </div>
           
           <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
+              <span className="text-xs text-muted-foreground">Admin</span>
+              <Switch
+                checked={user?.role === 'admin' || user?.role === 'superadmin'}
+                onCheckedChange={toggleDemoAdminRole}
+                disabled={isRoleUpdating}
+                aria-label="Toggle admin view"
+              />
+            </div>
+
             {/* Language Selector for Voice */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-xs">
               <span className="text-muted-foreground">Voice:</span>
@@ -1494,7 +1538,7 @@ function ChatInterface() {
                 <option value="hi">हिन्दी (Hindi)</option>
               </select>
             </div>
-            
+
             <button
               onClick={toggleTheme}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
@@ -1502,25 +1546,14 @@ function ChatInterface() {
               {isDark ? <Sun03Icon size={20} /> : <Moon02Icon size={20} />}
             </button>
 
-            <button
-              onClick={toggleDemoAdminRole}
-              disabled={isRoleUpdating}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-60"
-              title="Demo role toggle (user/admin)"
-            >
-              <span className="text-xs text-muted-foreground hidden sm:inline">Admin</span>
-              <span
-                className={`relative w-9 h-5 rounded-full transition-colors ${
-                  user?.role === 'admin' || user?.role === 'superadmin' ? 'bg-primary' : 'bg-muted'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                    user?.role === 'admin' || user?.role === 'superadmin' ? 'translate-x-4' : 'translate-x-0.5'
-                  }`}
-                />
-              </span>
-            </button>
+            <div className="sm:hidden rounded-lg border border-border bg-muted/40 px-2 py-1.5">
+              <Switch
+                checked={user?.role === 'admin' || user?.role === 'superadmin'}
+                onCheckedChange={toggleDemoAdminRole}
+                disabled={isRoleUpdating}
+                aria-label="Toggle admin view"
+              />
+            </div>
           </div>
         </header>
 
@@ -1614,12 +1647,16 @@ function ChatInterface() {
               </div>
             )}
 
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
-              >
-                <div className="flex flex-col gap-2 max-w-[85%]">
+            {messages.map((message, index) => {
+              const menuId = getDownloadMenuId(message, index);
+              const isDownloadMenuOpen = downloadMenuOpenFor === menuId;
+
+              return (
+                <div
+                  key={index}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+                >
+                  <div className="flex flex-col gap-2 max-w-[85%]">
                   <div
                     className={`rounded-[1.4rem] px-5 py-3 ${
                       message.role === 'user'
@@ -1672,21 +1709,49 @@ function ChatInterface() {
                         )}
                       </button>
                       
-                      {/* PDF Download button - only for generated documents */}
+                      {/* Download button with format dropdown - only for generated documents */}
                       {isGeneratedDocument(message) && (
-                        <button
-                          onClick={() => handleDownloadPDF(message)}
-                          className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
-                          title="Download as PDF"
-                        >
-                          <Download01Icon size={16} />
-                        </button>
+                        <div className="relative" data-download-menu="true">
+                          <button
+                            onClick={() => {
+                              setDownloadMenuOpenFor(isDownloadMenuOpen ? null : menuId);
+                            }}
+                            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                            title="Download document"
+                            data-download-menu="true"
+                          >
+                            <Download01Icon size={16} />
+                          </button>
+
+                          {isDownloadMenuOpen && (
+                            <div
+                              className="absolute left-0 top-full mt-1 w-36 rounded-lg border border-border bg-card shadow-md z-20 p-1"
+                              data-download-menu="true"
+                            >
+                              <button
+                                onClick={() => handleDownloadDocument(message, 'pdf')}
+                                className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-accent rounded"
+                                data-download-menu="true"
+                              >
+                                Download .pdf
+                              </button>
+                              <button
+                                onClick={() => handleDownloadDocument(message, 'docx')}
+                                className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-accent rounded"
+                                data-download-menu="true"
+                              >
+                                Download .docx
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
+                </div>
+              );
+            })}
 
             {isLoading && (
               <div className="flex justify-start animate-fade-in">
