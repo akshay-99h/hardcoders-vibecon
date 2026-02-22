@@ -1333,19 +1333,20 @@ function ChatInterface() {
 
   const extractMissionSteps = (content) => {
     const steps = [];
-    const lines = content.split('\n');
-    for (const line of lines) {
-      const m = line.match(/^\s*\d+[.)]\s+(.+)/);
-      if (m) {
-        const step = m[1]
-          .replace(/\*\*/g, '')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          .trim();
-        if (step && step.length > 3) {
-          steps.push(step.slice(0, 120));
-        }
+    const numberedStepRegex = /(?:^|\n)\s*\d+[.)]\s+([\s\S]*?)(?=(?:\n\s*\d+[.)]\s+)|$)/g;
+
+    let match;
+    while ((match = numberedStepRegex.exec(content)) !== null) {
+      const step = match[1]
+        .replace(/\n+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^[-*]\s+/, '')
+        .trim();
+      if (step) {
+        steps.push(step);
       }
     }
+
     return steps;
   };
 
