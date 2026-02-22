@@ -5,6 +5,7 @@ Handles user queries with context-aware responses
 from typing import Dict, Any
 from services.llm_service import LLMService
 from services.privacy_guard import PrivacyGuard
+from config.settings import settings
 
 
 class ChatAgent:
@@ -156,8 +157,31 @@ AI Response (ask first):
         
         self.llm_service = LLMService(
             system_message=system_message,
-            model="claude-sonnet-4-5-20250929"
+            provider=settings.PRIMARY_PROVIDER,
+            model=settings.PRIMARY_MODEL
         )
+        self.voice_llm_service = LLMService(
+            system_message=system_message,
+            provider=settings.VOICE_PROVIDER,
+            model=settings.VOICE_MODEL
+        )
+
+    @staticmethod
+    def _trim_for_voice(text: str, max_chars: int) -> str:
+        """Keep voice responses concise to reduce speech playback latency."""
+        if len(text) <= max_chars:
+            return text
+
+        cut = text.rfind(". ", 0, max_chars)
+        if cut < int(max_chars * 0.55):
+            cut = text.rfind("\n", 0, max_chars)
+        if cut < int(max_chars * 0.55):
+            cut = max_chars
+
+        trimmed = text[:cut].strip()
+        if not trimmed.endswith((".", "!", "?")):
+            trimmed += "..."
+        return trimmed
     
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process user input and provide helpful guidance
@@ -177,6 +201,7 @@ AI Response (ask first):
         previous_context = input_data.get("previous_context", "")
         knowledge_context = input_data.get("knowledge_context", "")
         document_context = input_data.get("document_context", "")
+        fast_mode = bool(input_data.get("fast_mode", False))
         
         # Check for sensitive content (actual data sharing attempts)
         is_sensitive, detected = PrivacyGuard.detect_sensitive_content(user_input)
@@ -219,9 +244,21 @@ Keep your response concise but complete, and ensure all information is factual a
             prompt += """Provide a clear, helpful response with step-by-step guidance if applicable.
 If the user is asking about creating/renewing documents like Aadhaar or PAN, provide the specific steps.
 Keep your response concise but complete."""
+
+        if fast_mode:
+            prompt += f"""
+
+VOICE MODE RESPONSE RULES:
+- Keep the answer conversational and concise.
+- Put the most important action first.
+- Prefer short sentences and plain language.
+- Keep response under {settings.VOICE_MAX_RESPONSE_CHARS} characters when possible."""
         
         try:
-            response = await self.llm_service.send_message(prompt)
+            llm_service = self.voice_llm_service if fast_mode else self.llm_service
+            response = await llm_service.send_message(prompt)
+            if fast_mode:
+                response = self._trim_for_voice(response, settings.VOICE_MAX_RESPONSE_CHARS)
             
             # Return the helpful response
             return {

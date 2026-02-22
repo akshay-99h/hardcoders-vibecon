@@ -51,12 +51,38 @@ function ChatInterface() {
   const fileInputRef = useRef(null);
   const streamRef = useRef(null);
   const isInVoiceModeRef = useRef(false); // Track voice mode for callbacks
+  const voiceCallIdRef = useRef(null);
+  const currentConversationRef = useRef(null);
+  const voiceVadFrameRef = useRef(null);
+  const voiceListeningTimeoutRef = useRef(null);
+  const voiceAudioContextRef = useRef(null);
+  const isStartingVoiceListeningRef = useRef(false);
+
+  const clearVoiceRuntimeArtifacts = () => {
+    if (voiceVadFrameRef.current !== null) {
+      window.cancelAnimationFrame(voiceVadFrameRef.current);
+      voiceVadFrameRef.current = null;
+    }
+
+    if (voiceListeningTimeoutRef.current) {
+      window.clearTimeout(voiceListeningTimeoutRef.current);
+      voiceListeningTimeoutRef.current = null;
+    }
+
+    const audioContext = voiceAudioContextRef.current;
+    if (audioContext && audioContext.state !== 'closed') {
+      audioContext.close().catch(() => {});
+    }
+    voiceAudioContextRef.current = null;
+  };
 
   useEffect(() => {
     handleAuthCallback();
     
     // Cleanup speech synthesis and voice mode on unmount
     return () => {
+      const activeCallId = voiceCallIdRef.current;
+      clearVoiceRuntimeArtifacts();
       if (window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
       }
@@ -65,8 +91,19 @@ function ChatInterface() {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (activeCallId) {
+        api.post('/api/ai-call/end', { call_id: activeCallId }).catch(() => {});
+      }
     };
   }, []);
+
+  useEffect(() => {
+    voiceCallIdRef.current = voiceCallId;
+  }, [voiceCallId]);
+
+  useEffect(() => {
+    currentConversationRef.current = currentConversation;
+  }, [currentConversation]);
 
   useEffect(() => {
     if (isDark) {
@@ -176,6 +213,7 @@ function ChatInterface() {
     try {
       const response = await api.get(`/api/conversations/${conversationId}`);
       setMessages(response.data.messages);
+      currentConversationRef.current = conversationId;
       setCurrentConversation(conversationId);
       setAutomationButtonStates({});
       setActiveAutomationMessageId(null);
@@ -555,11 +593,21 @@ function ChatInterface() {
     try {
       // Start AI call session
       const response = await api.post('/api/ai-call/start', {
-        conversation_id: currentConversation,
+        conversation_id: currentConversationRef.current,
         language: selectedLanguage
       });
-      
-      setVoiceCallId(response.data.call_id);
+
+      const nextCallId = response.data.call_id;
+      const nextConversationId = response.data.conversation_id;
+
+      setVoiceCallId(nextCallId);
+      voiceCallIdRef.current = nextCallId;
+
+      if (!currentConversationRef.current && nextConversationId) {
+        currentConversationRef.current = nextConversationId;
+        setCurrentConversation(nextConversationId);
+        fetchConversations();
+      }
       setIsInVoiceMode(true);
       isInVoiceModeRef.current = true; // Update ref for callbacks
       setVoiceState('listening');
@@ -573,11 +621,27 @@ function ChatInterface() {
   };
   
   const startVoiceListening = async () => {
+    if (!isInVoiceModeRef.current) return;
+    if (isStartingVoiceListeningRef.current) return;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') return;
+
+    isStartingVoiceListeningRef.current = true;
+
     try {
+      clearVoiceRuntimeArtifacts();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       });
-      
+      if (!isInVoiceModeRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
       streamRef.current = stream;
       
       // Determine supported mime type
@@ -596,6 +660,7 @@ function ChatInterface() {
       
       // Enhanced Voice Activity Detection (VAD)
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      voiceAudioContextRef.current = audioContext;
       const audioStreamSource = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 2048;
@@ -606,21 +671,18 @@ function ChatInterface() {
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
       
-      let silenceStart = null;
       let speechDetected = false;
       let consecutiveSilenceFrames = 0;
       
-      // Balanced thresholds - not too sensitive, not too slow
-      const SPEECH_THRESHOLD = 15; // Good threshold
-      const SILENCE_FRAMES_NEEDED = 120; // ~2-3 seconds at 60fps (balanced)
-      const MIN_SPEECH_FRAMES = 30; // Minimum frames of speech before considering silence
+      // Tuned for lower turn latency while avoiding accidental sends.
+      const SPEECH_THRESHOLD = 12;
+      const SILENCE_FRAMES_NEEDED = 60; // ~1 second at 60fps
+      const MIN_SPEECH_FRAMES = 12; // ~200ms speech floor
       let speechFrames = 0;
       
       const detectSound = () => {
-        if (!isInVoiceModeRef.current || !mediaRecorder || mediaRecorder.state !== 'recording') {
-          if (audioContext.state !== 'closed') {
-            audioContext.close();
-          }
+        if (!isInVoiceModeRef.current || mediaRecorder.state !== 'recording') {
+          clearVoiceRuntimeArtifacts();
           return;
         }
         
@@ -649,7 +711,6 @@ function ChatInterface() {
             console.log('🎤 Speech detected, monitoring for end...');
           }
           
-          silenceStart = null;
         } else if (speechDetected) {
           // We've detected speech before, now checking for silence
           consecutiveSilenceFrames++;
@@ -657,16 +718,13 @@ function ChatInterface() {
           if (consecutiveSilenceFrames >= SILENCE_FRAMES_NEEDED) {
             setIsUserSpeaking(false); // Hide "Speaking..."
             console.log('🔇 Silence detected after speech - auto-sending');
-            if (audioContext.state !== 'closed') {
-              audioContext.close();
-            }
             stopVoiceListening();
             return;
           }
         }
         
         // Continue monitoring
-        requestAnimationFrame(detectSound);
+        voiceVadFrameRef.current = window.requestAnimationFrame(detectSound);
       };
       
       mediaRecorder.ondataavailable = (event) => {
@@ -676,9 +734,13 @@ function ChatInterface() {
       };
       
       mediaRecorder.onstop = async () => {
-        // Cleanup audio context
-        if (audioContext.state !== 'closed') {
-          audioContext.close();
+        clearVoiceRuntimeArtifacts();
+        setVoiceVolume(0);
+
+        // Release this stream before the next turn to avoid leaked tracks.
+        stream.getTracks().forEach(track => track.stop());
+        if (streamRef.current === stream) {
+          streamRef.current = null;
         }
         
         if (!isInVoiceModeRef.current) return;
@@ -710,32 +772,42 @@ function ChatInterface() {
       setVoiceState('listening');
       
       // Start VAD monitoring
-      requestAnimationFrame(detectSound);
+      voiceVadFrameRef.current = window.requestAnimationFrame(detectSound);
       
-      // Safety fallback - if no activity detected in 15 seconds, auto-send
-      setTimeout(() => {
+      // Safety fallback - if no activity detected in 10 seconds, auto-send
+      voiceListeningTimeoutRef.current = window.setTimeout(() => {
         if (mediaRecorder.state === 'recording' && isInVoiceModeRef.current) {
           if (speechDetected) {
-            console.log('⏱️ Auto-sending after 15 seconds');
+            console.log('⏱️ Auto-sending after 10 seconds');
             stopVoiceListening();
           }
         }
-      }, 15000);
+      }, 10000);
       
     } catch (error) {
       console.error('Failed to start voice listening:', error);
       alert(`Microphone error: ${error.message}`);
       endVoiceConversation();
+    } finally {
+      isStartingVoiceListeningRef.current = false;
     }
   };
   
   const stopVoiceListening = () => {
+    clearVoiceRuntimeArtifacts();
+    setIsUserSpeaking(false);
+    setVoiceVolume(0);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
   };
   
   const processVoiceTurn = async (audioBlob) => {
+    const activeCallId = voiceCallIdRef.current;
+    if (!activeCallId || !isInVoiceModeRef.current) {
+      return;
+    }
+
     setVoiceState('thinking');
     setIsUserSpeaking(false); // Hide "Speaking..." indicator
     
@@ -746,11 +818,19 @@ function ChatInterface() {
       // Show transcribing indicator
       console.log('📤 Sending audio to backend...');
       
-      const response = await api.post(`/api/ai-call/turn?call_id=${voiceCallId}`, formData, {
+      const response = await api.post(`/api/ai-call/turn?call_id=${activeCallId}&include_audio=false`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
-      const { transcribed_text, response_text } = response.data;
+      const { transcribed_text, response_text, no_speech } = response.data;
+      if (no_speech || !transcribed_text?.trim()) {
+        setVoiceState('listening');
+        await fetchBillingStatus();
+        if (isInVoiceModeRef.current) {
+          await startVoiceListening();
+        }
+        return;
+      }
       
       console.log('✅ Received response from backend');
       
@@ -769,16 +849,12 @@ function ChatInterface() {
         fromVoice: true
       };
       
-      // ✅ Show user message FIRST (immediately)
-      setMessages(prev => [...prev, userMessage]);
-      
-      // Small delay then show AI response (feels more natural)
-      setTimeout(() => {
-        setMessages(prev => [...prev, aiMessage]);
-      }, 100);
+      // Show the full turn together immediately to reduce perceived latency.
+      setMessages(prev => [...prev, userMessage, aiMessage]);
       
       // Update conversation ID if this was a new conversation
-      if (!currentConversation && response.data.conversation_id) {
+      if (!currentConversationRef.current && response.data.conversation_id) {
+        currentConversationRef.current = response.data.conversation_id;
         setCurrentConversation(response.data.conversation_id);
         fetchConversations();
       }
@@ -802,22 +878,20 @@ function ChatInterface() {
       cleanText = cleanText.replace(/[\u{1FA70}-\u{1FAFF}]/gu, '');
       cleanText = cleanText.replace(/[\u{2600}-\u{26FF}]/gu, '');
       cleanText = cleanText.replace(/[\u{2700}-\u{27BF}]/gu, '');
+      cleanText = cleanText.trim();
+      if (!cleanText) {
+        setVoiceState('listening');
+        if (isInVoiceModeRef.current) {
+          await startVoiceListening();
+        }
+        return;
+      }
       
       // Use browser's native speech synthesis
       const utterance = new SpeechSynthesisUtterance(cleanText);
       
-      // Load voices (may not be immediately available)
+      // Use currently available voices; avoid waiting to keep turns fast.
       let voices = window.speechSynthesis.getVoices();
-      
-      // If voices not loaded, wait for them
-      if (voices.length === 0) {
-        await new Promise(resolve => {
-          window.speechSynthesis.onvoiceschanged = () => {
-            voices = window.speechSynthesis.getVoices();
-            resolve();
-          };
-        });
-      }
       
       // Try to get a good female voice (prefer Google voices if available)
       const femaleVoice = voices.find(voice => 
@@ -842,7 +916,7 @@ function ChatInterface() {
         // Continue the conversation loop
         if (isInVoiceModeRef.current) {
           setVoiceState('listening');
-          startVoiceListening();
+          void startVoiceListening();
         }
       };
       
@@ -851,10 +925,14 @@ function ChatInterface() {
         // Continue even if speech fails
         if (isInVoiceModeRef.current) {
           setVoiceState('listening');
-          startVoiceListening();
+          void startVoiceListening();
         }
       };
       
+      // Avoid queued stale utterances between turns.
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+      }
       window.speechSynthesis.speak(utterance);
       
     } catch (error) {
@@ -870,8 +948,11 @@ function ChatInterface() {
   };
   
   const endVoiceConversation = async () => {
+    const activeCallId = voiceCallIdRef.current;
+
     setIsInVoiceMode(false);
     isInVoiceModeRef.current = false; // Update ref for callbacks
+    clearVoiceRuntimeArtifacts();
     setVoiceState('idle');
     setVoiceVolume(0); // Reset volume indicator
     setIsUserSpeaking(false); // Reset speaking indicator
@@ -893,13 +974,14 @@ function ChatInterface() {
     }
     
     // End call session on backend
-    if (voiceCallId) {
+    voiceCallIdRef.current = null;
+    setVoiceCallId(null);
+    if (activeCallId) {
       try {
-        await api.post('/api/ai-call/end', { call_id: voiceCallId });
+        await api.post('/api/ai-call/end', { call_id: activeCallId });
       } catch (error) {
         console.error('Error ending call:', error);
       }
-      setVoiceCallId(null);
     }
   };
 
@@ -941,6 +1023,7 @@ function ChatInterface() {
 
       // Update current conversation ID if new
       if (!currentConversation) {
+        currentConversationRef.current = response.data.conversationId;
         setCurrentConversation(response.data.conversationId);
         fetchConversations(); // Refresh sidebar
       }
@@ -961,6 +1044,7 @@ function ChatInterface() {
   };
 
   const handleNewChat = () => {
+    currentConversationRef.current = null;
     setCurrentConversation(null);
     setMessages([]);
     setAutomationButtonStates({});
@@ -1058,6 +1142,7 @@ function ChatInterface() {
       
       // Update conversation ID if this was a new conversation
       if (response.data.conversation_id && !currentConversation) {
+        currentConversationRef.current = response.data.conversation_id;
         setCurrentConversation(response.data.conversation_id);
         fetchConversations(); // Refresh sidebar
       }

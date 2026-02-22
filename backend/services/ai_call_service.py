@@ -5,7 +5,9 @@ from typing import Dict, Any
 from services.voice_service import VoiceService
 from services.chat_agent import ChatAgent
 from services.context_service import ContextService
+from config.settings import settings
 from datetime import datetime, timezone
+from io import BytesIO
 import uuid
 
 # MODULE-LEVEL (GLOBAL) storage - persists across ALL instances and requests
@@ -29,6 +31,10 @@ class AICallService:
             "conversation_id": conversation_id,
             "language": language,
             "turn_count": 0,
+            "context_loaded": False,
+            "base_context": "",
+            "document_context": "",
+            "recent_turns": [],
             "created_at": datetime.now(timezone.utc)
         }
         
@@ -52,6 +58,29 @@ class AICallService:
         if call_id in _GLOBAL_ACTIVE_CALLS:
             del _GLOBAL_ACTIVE_CALLS[call_id]
             print(f"✅ Ended call session: {call_id}")
+
+    def set_initial_context(self, call_id: str, base_context: str = "", document_context: str = ""):
+        """Store DB-backed context once per call to avoid repeated DB reads each turn."""
+        session = self.get_call_session(call_id)
+        if not session:
+            return
+        session["base_context"] = base_context or ""
+        session["document_context"] = document_context or ""
+        session["context_loaded"] = True
+
+    def append_turn_context(self, call_id: str, user_text: str, assistant_text: str, max_lines: int = 16):
+        """Keep a small rolling context window for faster follow-up turns."""
+        session = self.get_call_session(call_id)
+        if not session:
+            return
+
+        recent_turns = session.setdefault("recent_turns", [])
+        recent_turns.extend([
+            f"user: {user_text}",
+            f"assistant: {assistant_text}",
+        ])
+        if len(recent_turns) > max_lines:
+            session["recent_turns"] = recent_turns[-max_lines:]
     
     async def process_audio_turn(
         self, 
@@ -59,7 +88,8 @@ class AICallService:
         audio_data: bytes,
         conversation_context: str = "",
         knowledge_context: str = "",
-        document_context: str = ""
+        document_context: str = "",
+        include_audio: bool = True
     ) -> Dict[str, Any]:
         """
         Process one turn of conversation:
@@ -80,39 +110,50 @@ class AICallService:
             raise ValueError("Invalid call session")
         
         language = call_session["language"]
+
+        if not audio_data or len(audio_data) < settings.VOICE_MIN_AUDIO_BYTES:
+            return {
+                "transcribed_text": "",
+                "response_text": "",
+                "language": language,
+                "turn_number": call_session["turn_count"],
+                "no_speech": True
+            }
         
         # Step 1: Transcribe audio to text
-        import tempfile
-        import os
-        
         print(f"Processing audio turn for call {call_id}, audio size: {len(audio_data)} bytes")
-        
-        # Save audio to temp file
-        temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".webm")
-        temp_audio.write(audio_data)
-        temp_audio.close()
-        
-        print(f"Saved audio to temp file: {temp_audio.name}")
-        
+
+        # Keep audio in-memory to avoid filesystem I/O per turn.
+        audio_file = BytesIO(audio_data)
+        audio_file.name = "voice.webm"
+
         try:
-            with open(temp_audio.name, "rb") as audio_file:
-                print(f"Transcribing audio with language: {language}")
-                transcribed_text = await self.voice_service.transcribe_audio(audio_file, language)
-                print(f"Transcribed text: {transcribed_text}")
+            print(f"Transcribing audio with language: {language}")
+            transcribed_text = await self.voice_service.transcribe_audio(audio_file, language)
+            transcribed_text = (transcribed_text or "").strip()
+            print(f"Transcribed text: {transcribed_text}")
         except Exception as e:
             print(f"Transcription error: {e}")
             import traceback
             traceback.print_exc()
             raise
-        finally:
-            os.unlink(temp_audio.name)
+
+        if not transcribed_text:
+            return {
+                "transcribed_text": "",
+                "response_text": "",
+                "language": language,
+                "turn_number": call_session["turn_count"],
+                "no_speech": True
+            }
         
         # Step 2: Get AI response
         ai_result = await self.chat_agent.process({
             "user_input": transcribed_text,
             "previous_context": conversation_context,
             "knowledge_context": knowledge_context,
-            "document_context": document_context
+            "document_context": document_context,
+            "fast_mode": True
         })
         
         if "error" in ai_result:
@@ -120,20 +161,23 @@ class AICallService:
         else:
             response_text = ai_result.get("message", "How can I help you?")
         
-        # Step 3: Generate emotional audio response
-        # Use OpenAI TTS with emotional voice
-        response_audio = await self.voice_service.generate_speech_base64(response_text, language)
+        response_audio = None
+        if include_audio:
+            # Step 3: Generate emotional audio response (optional for low-latency mode)
+            response_audio = await self.voice_service.generate_speech_base64(response_text, language)
         
         # Increment turn count
         call_session["turn_count"] += 1
         
-        return {
+        payload = {
             "transcribed_text": transcribed_text,
             "response_text": response_text,
-            "response_audio_base64": response_audio,
             "language": language,
             "turn_number": call_session["turn_count"]
         }
+        if include_audio and response_audio:
+            payload["response_audio_base64"] = response_audio
+        return payload
 
 
 # Global AI call service
