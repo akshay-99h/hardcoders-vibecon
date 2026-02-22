@@ -1195,6 +1195,11 @@ function ChatInterface() {
 
     // Clean the text for better speech
     let cleanText = message.content;
+
+    // Remove embedded media HTML/links before speaking.
+    cleanText = cleanText.replace(/<iframe[\s\S]*?<\/iframe>/gi, ' ');
+    cleanText = cleanText.replace(/<\/?[^>]+>/g, ' ');
+    cleanText = cleanText.replace(/https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)[^\s]*/gi, ' ');
     
     // Remove emojis
     cleanText = cleanText.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
@@ -1223,9 +1228,6 @@ function ChatInterface() {
     cleanText = cleanText.replace(/\s+/g, ' ').trim();
     
     if (!cleanText) return;
-    
-    // Check if text has exclamation marks for emphasis
-    const hasEmphasis = cleanText.includes('!');
     
     // Detect language
     const isHindi = /[\u0900-\u097F]/.test(cleanText);
@@ -1351,6 +1353,146 @@ function ChatInterface() {
     const match = content.match(/https?:\/\/(?:[a-zA-Z0-9-]+\.)*gov\.in(?:\/[^\s)\]]*)?/i);
     if (!match) return '';
     return match[0].replace(/[.,;:!?]+$/, '');
+  };
+
+  const MAX_ASSISTANT_VIDEO_EMBEDS = 2;
+
+  const extractYouTubeVideoId = (rawUrl) => {
+    if (!rawUrl || typeof rawUrl !== 'string') return null;
+
+    try {
+      const parsed = new URL(rawUrl.trim());
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+      let videoId = '';
+
+      if (host === 'youtu.be') {
+        videoId = parsed.pathname.replace(/^\//, '').split('/')[0];
+      } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+        if (parsed.pathname === '/watch') {
+          videoId = parsed.searchParams.get('v') || '';
+        } else if (parsed.pathname.startsWith('/embed/')) {
+          videoId = parsed.pathname.split('/')[2] || '';
+        } else if (parsed.pathname.startsWith('/shorts/')) {
+          videoId = parsed.pathname.split('/')[2] || '';
+        }
+      }
+
+      if (/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+        return videoId;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const parseAssistantVideoEmbeds = (content) => {
+    if (!content || typeof content !== 'string') {
+      return {
+        sanitizedText: '',
+        topVideos: [],
+        bottomVideos: []
+      };
+    }
+
+    const seenVideoIds = new Set();
+    const explicitTop = [];
+    const explicitBottom = [];
+    const unpositioned = [];
+
+    const addVideoCandidate = (source, title = '', placement = null) => {
+      const videoId = extractYouTubeVideoId(source);
+      if (!videoId || seenVideoIds.has(videoId)) return;
+
+      seenVideoIds.add(videoId);
+      const normalizedTitle = String(title || 'Related video').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Related video';
+      const candidate = { videoId, title: normalizedTitle };
+
+      if (placement === 'top') {
+        explicitTop.push(candidate);
+      } else if (placement === 'bottom') {
+        explicitBottom.push(candidate);
+      } else {
+        unpositioned.push(candidate);
+      }
+    };
+
+    const iframeRegex = /<iframe[\s\S]*?<\/iframe>/gi;
+    const iframeMatches = content.match(iframeRegex) || [];
+
+    iframeMatches.forEach((iframeHtml) => {
+      const srcMatch = iframeHtml.match(/src=(["'])(.*?)\1/i);
+      if (!srcMatch?.[2]) return;
+
+      const titleMatch = iframeHtml.match(/title=(["'])(.*?)\1/i);
+      const placementMatch = iframeHtml.match(/data-(?:placement|position)=(["'])(top|bottom)\1/i);
+      addVideoCandidate(srcMatch[2], titleMatch?.[2] || '', placementMatch?.[2] || null);
+    });
+
+    let sanitizedText = content.replace(iframeRegex, '').trim();
+
+    const markdownLinkRegex = /\[[^\]]+\]\((https?:\/\/[^\s)]+)\)/gi;
+    for (const match of sanitizedText.matchAll(markdownLinkRegex)) {
+      addVideoCandidate(match[1], '');
+    }
+
+    const plainUrlRegex = /https?:\/\/[^\s<]+/gi;
+    for (const match of sanitizedText.matchAll(plainUrlRegex)) {
+      addVideoCandidate(match[0], '');
+    }
+
+    const topVideos = [];
+    const bottomVideos = [];
+
+    const addWithinLimit = (list, video) => {
+      if (topVideos.length + bottomVideos.length >= MAX_ASSISTANT_VIDEO_EMBEDS) return;
+      list.push(video);
+    };
+
+    explicitTop.forEach((video) => addWithinLimit(topVideos, video));
+    explicitBottom.forEach((video) => addWithinLimit(bottomVideos, video));
+
+    unpositioned.forEach((video) => {
+      if (topVideos.length + bottomVideos.length >= MAX_ASSISTANT_VIDEO_EMBEDS) return;
+      if (topVideos.length === 0) {
+        topVideos.push(video);
+      } else {
+        bottomVideos.push(video);
+      }
+    });
+
+    sanitizedText = sanitizedText
+      .replace(/^\s*(?:[-*]\s*)?(?:https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)[^\s]*)\s*$/gim, '')
+      .replace(/^\s*(?:[-*]\s*)?\[[^\]]+\]\((https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)[^\s)]+)\)\s*$/gim, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    return {
+      sanitizedText,
+      topVideos,
+      bottomVideos
+    };
+  };
+
+  const renderYouTubeEmbed = (video, key) => {
+    return (
+      <div key={key} className="mb-3 overflow-hidden rounded-xl border border-border/80 bg-muted/20">
+        <div className="border-b border-border/70 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+          {video.title}
+        </div>
+        <div className="relative w-full pt-[56.25%] bg-black/70">
+          <iframe
+            src={`https://www.youtube.com/embed/${video.videoId}`}
+            title={video.title}
+            className="absolute inset-0 h-full w-full"
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      </div>
+    );
   };
 
   const normalizeAutomationStatus = (automationState) => {
@@ -1926,6 +2068,9 @@ function ChatInterface() {
               const isDownloadMenuOpen = downloadMenuOpenFor === menuId;
               const automationStatus = getAutomationStateForMessage(menuId);
               const automationError = automationButtonStates[menuId]?.error || '';
+              const assistantMedia = message.role === 'assistant'
+                ? parseAssistantVideoEmbeds(message.content || '')
+                : null;
 
               return (
                 <div
@@ -1952,9 +2097,19 @@ function ChatInterface() {
                       <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                     ) : (
                       <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-card-foreground prose-strong:text-foreground prose-ul:text-card-foreground prose-ol:text-card-foreground prose-li:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-foreground">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {message.content}
-                        </ReactMarkdown>
+                        {assistantMedia?.topVideos.map((video, videoIndex) =>
+                          renderYouTubeEmbed(video, `${menuId}-top-${video.videoId}-${videoIndex}`)
+                        )}
+
+                        {assistantMedia?.sanitizedText ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {assistantMedia.sanitizedText}
+                          </ReactMarkdown>
+                        ) : null}
+
+                        {assistantMedia?.bottomVideos.map((video, videoIndex) =>
+                          renderYouTubeEmbed(video, `${menuId}-bottom-${video.videoId}-${videoIndex}`)
+                        )}
                       </div>
                     )}
                   </div>

@@ -130,6 +130,41 @@ Keywords Detected: {', '.join(keywords_matched)}
                 if note:
                     context_text += f"    Note: {note}\n"
             context_text += "\n"
+
+        # Add curated video references if available
+        video_references = data.get("video_references", [])
+        if video_references:
+            context_text += "VIDEO REFERENCES (YOUTUBE):\n"
+            for ref in video_references:
+                title = ref.get("title", "Helpful video")
+                youtube_url = ref.get("youtube_url", "")
+                embed_url = ref.get("embed_url", "")
+                topics = ref.get("topics", [])
+                use_when = ref.get("use_when", "")
+                default_placement = ref.get("default_placement", "")
+
+                context_text += f"  • {title}\n"
+                if topics:
+                    context_text += f"    Topics: {', '.join(topics)}\n"
+                if use_when:
+                    context_text += f"    Use when: {use_when}\n"
+                if youtube_url:
+                    context_text += f"    Watch URL: {youtube_url}\n"
+                if embed_url:
+                    context_text += f"    Embed URL: {embed_url}\n"
+                if default_placement:
+                    context_text += f"    Suggested placement: {default_placement}\n"
+            context_text += "\n"
+            context_text += (
+                "VIDEO EMBED RULES:\n"
+                "  • Use only the provided embed URLs. Do not invent video IDs.\n"
+                "  • Add at most 2 videos when highly relevant to the user's query.\n"
+                "  • Use exact iframe format with placement marker:\n"
+                "    <iframe src=\"https://www.youtube.com/embed/VIDEO_ID\" "
+                "title=\"Short helpful title\" data-placement=\"top|bottom\" "
+                "loading=\"lazy\" referrerpolicy=\"strict-origin-when-cross-origin\" "
+                "allowfullscreen></iframe>\n\n"
+            )
         
         # Add general rules if available
         general_rules = data.get("general_rules", [])
